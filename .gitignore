@@ -1,0 +1,5 @@
+/target/
+/.idea/
+/.tooling/
+/jdk25.zip
+*.iml

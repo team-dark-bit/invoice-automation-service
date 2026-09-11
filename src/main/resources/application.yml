@@ -2,9 +2,9 @@ spring:
   application:
     name: invoice-automation-service
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:invoice_automation_service}
-    username: ${DB_USER:invoice_user}
-    password: ${DB_PASSWORD:invoice_password}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:postgres}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
   jpa:
     open-in-view: false
     hibernate:

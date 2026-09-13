@@ -1,5 +1,6 @@
 package com.invoiceautomationservice.domain.model;
 
+import com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -16,7 +17,9 @@ public record InvoiceDraft(
         BigDecimal subtotal,
         BigDecimal total,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String providerReference,
+        Instant issuedAt
 ) {
 
   public InvoiceDraft {
@@ -37,6 +40,9 @@ public record InvoiceDraft(
     if (items.isEmpty()) {
       throw new IllegalArgumentException("invoice draft must contain at least one item");
     }
+    if (status == InvoiceDraftStatus.ISSUED && (providerReference == null || issuedAt == null)) {
+      throw new IllegalArgumentException("issued draft requires provider reference and issue date");
+    }
   }
 
   public static InvoiceDraft create(
@@ -51,7 +57,41 @@ public record InvoiceDraft(
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     return new InvoiceDraft(
             UUID.randomUUID(), companyId, customerId, currency, InvoiceDraftStatus.DRAFT,
-            items, subtotal, subtotal, createdAt, createdAt
+            items, subtotal, subtotal, createdAt, createdAt, null, null
     );
   }
+
+  public InvoiceDraft approve(Instant approvedAt) {
+    if (status != InvoiceDraftStatus.DRAFT) {
+      throw new InvalidInvoiceDraftStateException(status, InvoiceDraftStatus.DRAFT);
+    }
+    return copyWith(InvoiceDraftStatus.APPROVED, approvedAt, null, null);
+  }
+
+  public InvoiceDraft markIssued(String reference, Instant issueDate) {
+    ensureCanBeIssued();
+    if (reference == null || reference.isBlank()) {
+      throw new IllegalArgumentException("provider reference is required");
+    }
+    return copyWith(InvoiceDraftStatus.ISSUED, issueDate, reference, issueDate);
+  }
+
+  public void ensureCanBeIssued() {
+    if (status != InvoiceDraftStatus.APPROVED) {
+      throw new InvalidInvoiceDraftStateException(status, InvoiceDraftStatus.APPROVED);
+    }
+  }
+
+  private InvoiceDraft copyWith(
+          InvoiceDraftStatus newStatus,
+          Instant newUpdatedAt,
+          String newProviderReference,
+          Instant newIssuedAt
+  ) {
+    return new InvoiceDraft(
+            id, companyId, customerId, currency, newStatus, items, subtotal, total,
+            createdAt, newUpdatedAt, newProviderReference, newIssuedAt
+    );
+  }
+
 }

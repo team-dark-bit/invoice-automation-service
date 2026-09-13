@@ -1,6 +1,7 @@
 package com.invoiceautomationservice.infrastructure.config.exception;
 
 import com.invoiceautomationservice.commons.response.ApiResponse;
+import com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,14 @@ public class GlobalExceptionHandler {
               HttpStatus.BAD_REQUEST.value(), "Validation failed", errors
       );
       return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(InvalidInvoiceDraftStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidDraftState(InvalidInvoiceDraftStateException ex) {
+      ApiResponse<Void> response = ApiResponse.failure(
+              HttpStatus.CONFLICT.value(), "Invalid invoice draft state", List.of(ex.getMessage())
+      );
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
 }

@@ -12,6 +12,7 @@ import com.invoiceautomationservice.application.dto.response.InvoiceDraftRespons
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
+import com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException;
 import com.invoiceautomationservice.infrastructure.adapter.in.web.InvoiceDraftController;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -62,6 +63,41 @@ class InvoiceDraftControllerTest {
   }
 
   @Test
+  void approvesDraft() throws Exception {
+    when(useCase.approve(DRAFT_ID)).thenReturn(withStatus(InvoiceDraftStatus.APPROVED, null, null));
+
+    mockMvc.perform(post("/api/v1/invoice-drafts/{id}/approve", DRAFT_ID))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Invoice draft approved"))
+            .andExpect(jsonPath("$.data.status").value("APPROVED"));
+  }
+
+  @Test
+  void issuesDraft() throws Exception {
+    when(useCase.issue(DRAFT_ID)).thenReturn(withStatus(
+            InvoiceDraftStatus.ISSUED, "MOCK-" + DRAFT_ID, Instant.parse("2026-09-01T11:00:00Z")
+    ));
+
+    mockMvc.perform(post("/api/v1/invoice-drafts/{id}/issue", DRAFT_ID))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message").value("Invoice draft issued"))
+            .andExpect(jsonPath("$.data.status").value("ISSUED"))
+            .andExpect(jsonPath("$.data.providerReference").value("MOCK-" + DRAFT_ID));
+  }
+
+  @Test
+  void returnsConflictForInvalidTransition() throws Exception {
+    when(useCase.approve(DRAFT_ID)).thenThrow(
+            new InvalidInvoiceDraftStateException(InvoiceDraftStatus.APPROVED, InvoiceDraftStatus.DRAFT)
+    );
+
+    mockMvc.perform(post("/api/v1/invoice-drafts/{id}/approve", DRAFT_ID))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.statusCode").value(409))
+            .andExpect(jsonPath("$.message").value("Invalid invoice draft state"));
+  }
+
+  @Test
   void rejectsDraftWithoutItems() throws Exception {
     mockMvc.perform(post("/api/v1/invoice-drafts")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -101,7 +137,17 @@ class InvoiceDraftControllerTest {
     Instant now = Instant.parse("2026-09-01T10:00:00Z");
     return new InvoiceDraftResponse(
             DRAFT_ID, "company-1", "customer-1", "PEN", InvoiceDraftStatus.DRAFT,
-            List.of(item), new BigDecimal("300.50"), new BigDecimal("300.50"), now, now
+            List.of(item), new BigDecimal("300.50"), new BigDecimal("300.50"), now, now, null, null
+    );
+  }
+
+  private InvoiceDraftResponse withStatus(
+          InvoiceDraftStatus status, String providerReference, Instant issuedAt
+  ) {
+    InvoiceDraftResponse base = response();
+    return new InvoiceDraftResponse(
+            base.id(), base.companyId(), base.customerId(), base.currency(), status, base.items(),
+            base.subtotal(), base.total(), base.createdAt(), base.updatedAt(), providerReference, issuedAt
     );
   }
 }

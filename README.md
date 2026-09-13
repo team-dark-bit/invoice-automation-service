@@ -1,6 +1,6 @@
 # Invoice Assistant
 
-Servicio backend de un SaaS de facturación conversacional. El estado actual cubre los Releases 1 al 6: base hexagonal, configuración multiempresa, agregado de borrador con ítems, persistencia PostgreSQL, API REST y validaciones de negocio. WhatsApp, aprobación y emisión electrónica se incorporarán en releases posteriores.
+Servicio backend de un SaaS de facturación conversacional. El estado actual cubre los Releases 1 al 8: base hexagonal, configuración multiempresa, borradores con ítems, persistencia PostgreSQL, API REST, validaciones, aprobación y emisión mediante un proveedor simulado. WhatsApp y la integración real de emisión electrónica se incorporarán en releases posteriores.
 
 ## Arquitectura
 
@@ -66,11 +66,18 @@ Consultar un borrador:
 curl -i http://localhost:8080/api/v1/invoice-drafts/{draftId}
 ```
 
+Aprobar y emitir un borrador mediante el proveedor mock:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/invoice-drafts/{draftId}/approve
+curl -i -X POST http://localhost:8080/api/v1/invoice-drafts/{draftId}/issue
+```
+
 Swagger UI: `http://localhost:8080/swagger-ui.html`. Salud: `http://localhost:8080/actuator/health`.
 
 ## Colección Postman
 
-El repositorio incluye una colección ejecutable con todos los endpoints disponibles hasta Release 6:
+El repositorio incluye una colección ejecutable con todos los endpoints disponibles hasta Release 8:
 
 - Colección: `docs/postman/invoice-automation-service.postman_collection.json`
 - Environment local: `docs/postman/local.postman_environment.json`
@@ -83,6 +90,8 @@ Importe ambos archivos en Postman, seleccione el environment `Invoice Automation
 4. Crea un cliente, lo localiza por su documento y guarda su ID.
 5. Crea un borrador con dos ítems y guarda su ID.
 6. Recupera el borrador persistido y valida sus ítems y totales.
+7. Aprueba el borrador y comprueba su cambio de estado.
+8. Emite el borrador con el proveedor mock y valida la referencia generada.
 
 Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones. El environment no contiene contraseñas ni otros secretos y puede mantenerse versionado.
 
@@ -172,4 +181,34 @@ Refuerza las reglas necesarias para impedir la creación de borradores inconsist
 - Los errores de validación se convierten en respuestas HTTP `400 Bad Request` uniformes y legibles.
 - Las pruebas cubren datos inválidos, referencias inactivas, cálculo de importes e inmutabilidad del agregado.
 
-Hasta este punto no se incluyen impuestos, descuentos, aprobación, emisión electrónica, integración con SUNAT, autenticación, WhatsApp ni inteligencia artificial.
+## Alcance de Release 7
+
+Incorpora la aprobación explícita del borrador:
+
+- Añade el estado `APPROVED` al ciclo de vida de `InvoiceDraft`.
+- Implementa la transición de dominio `DRAFT → APPROVED` como una operación inmutable.
+- Impide aprobar nuevamente un borrador aprobado o emitido.
+- Actualiza `updatedAt` utilizando el reloj UTC inyectado.
+- Persiste el nuevo estado dentro de una transacción.
+- Expone `POST /api/v1/invoice-drafts/{id}/approve`.
+- Devuelve HTTP `409 Conflict` cuando se intenta ejecutar una transición desde un estado incorrecto.
+- Incluye pruebas de dominio, servicio y controlador para transiciones válidas e inválidas.
+
+La aprobación solamente confirma que el agregado está listo para emitirse; no llama todavía a un proveedor externo.
+
+## Alcance de Release 8
+
+Introduce la abstracción necesaria para emitir una factura sin acoplar el caso de uso a un proveedor específico:
+
+- Define el puerto de salida `BillingProvider`, que recibe un borrador aprobado y devuelve una referencia y fecha de emisión.
+- Implementa `MockBillingProvider`, un adaptador local determinista que genera referencias con el formato `MOCK-{invoiceDraftId}`.
+- Selecciona el proveedor mediante `BILLING_PROVIDER`; el valor predeterminado es `mock`.
+- Añade el estado `ISSUED` y la transición `APPROVED → ISSUED`.
+- Persiste `providerReference` e `issuedAt` mediante una migración Flyway incremental.
+- Exige que todo borrador emitido tenga referencia y fecha del proveedor.
+- Expone `POST /api/v1/invoice-drafts/{id}/issue` para ejecutar el flujo completo con el mock.
+- Incluye pruebas del adaptador mock, del caso de uso, del dominio y del contrato HTTP.
+
+La futura integración con SUNAT implementará el mismo puerto `BillingProvider`, permitiendo sustituir el mock sin modificar el dominio ni el controlador.
+
+Hasta este punto no se incluyen impuestos, descuentos, proveedor SUNAT real, autenticación, WhatsApp ni inteligencia artificial.

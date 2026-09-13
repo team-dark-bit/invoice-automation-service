@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
@@ -12,10 +13,12 @@ import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemReq
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
+import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
+import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
@@ -35,6 +38,7 @@ class CreateInvoiceDraftServiceTest {
   private CompanyRepository companyRepository;
   private CustomerRepository customerRepository;
   private InvoiceDraftDomainResponseMapper mapper;
+  private BillingProvider billingProvider;
   private InvoiceDraftService service;
 
   @BeforeEach
@@ -43,8 +47,11 @@ class CreateInvoiceDraftServiceTest {
     companyRepository = mock(CompanyRepository.class);
     customerRepository = mock(CustomerRepository.class);
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
+    billingProvider = mock(BillingProvider.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
-    service = new InvoiceDraftService(draftRepository, companyRepository, customerRepository, mapper, clock);
+    service = new InvoiceDraftService(
+            draftRepository, companyRepository, customerRepository, billingProvider, mapper, clock
+    );
   }
 
   @Test
@@ -97,6 +104,48 @@ class CreateInvoiceDraftServiceTest {
     assertThat(service.findById(draft.id())).isSameAs(response);
   }
 
+  @Test
+  void approvesDraftAndPersistsTransition() {
+    InvoiceDraft draft = draft();
+    when(draftRepository.findById(draft.id())).thenReturn(draft);
+    when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(mapper.toResponse(any(InvoiceDraft.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
+
+    InvoiceDraftResponse result = service.approve(draft.id());
+
+    assertThat(result.status()).isEqualTo(com.invoiceautomationservice.domain.model.InvoiceDraftStatus.APPROVED);
+    verify(draftRepository).save(any(InvoiceDraft.class));
+  }
+
+  @Test
+  void issuesApprovedDraftThroughBillingProvider() {
+    InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
+    BillingResult billingResult = new BillingResult(
+            "MOCK-" + approved.id(), Instant.parse("2026-09-01T10:00:00Z")
+    );
+    when(draftRepository.findById(approved.id())).thenReturn(approved);
+    when(billingProvider.issue(approved)).thenReturn(billingResult);
+    when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(mapper.toResponse(any(InvoiceDraft.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
+
+    InvoiceDraftResponse result = service.issue(approved.id());
+
+    assertThat(result.status()).isEqualTo(com.invoiceautomationservice.domain.model.InvoiceDraftStatus.ISSUED);
+    assertThat(result.providerReference()).isEqualTo("MOCK-" + approved.id());
+    assertThat(result.issuedAt()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
+    verify(billingProvider).issue(approved);
+  }
+
+  @Test
+  void doesNotCallBillingProviderWhenDraftIsNotApproved() {
+    InvoiceDraft draft = draft();
+    when(draftRepository.findById(draft.id())).thenReturn(draft);
+
+    assertThatThrownBy(() -> service.issue(draft.id()))
+            .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
+    verifyNoInteractions(billingProvider);
+  }
+
   private CreateInvoiceDraftRequest request() {
     return new CreateInvoiceDraftRequest("company-1", "customer-1", "PEN", List.of(
             new CreateInvoiceItemRequest("Consulting", new BigDecimal("2"), new BigDecimal("150.25")),
@@ -131,7 +180,8 @@ class CreateInvoiceDraftServiceTest {
     )).toList();
     return new InvoiceDraftResponse(
             draft.id(), draft.companyId(), draft.customerId(), draft.currency(), draft.status(),
-            items, draft.subtotal(), draft.total(), draft.createdAt(), draft.updatedAt()
+            items, draft.subtotal(), draft.total(), draft.createdAt(), draft.updatedAt(),
+            draft.providerReference(), draft.issuedAt()
     );
   }
 }

@@ -16,6 +16,8 @@ public record InvoiceDraftResponse(
         BigDecimal subtotal,
         BigDecimal total,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        String providerReference,
+        Instant issuedAt
 ) {
 }

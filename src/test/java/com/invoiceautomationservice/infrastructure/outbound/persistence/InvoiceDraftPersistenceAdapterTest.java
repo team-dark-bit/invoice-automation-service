@@ -89,7 +89,7 @@ class InvoiceDraftPersistenceAdapterTest {
     return new InvoiceDraft(
             UUID.fromString("4d773aa2-8ea7-4c26-935d-f47086d7c385"),
             "company-1", "customer-1", "PEN", InvoiceDraftStatus.DRAFT, List.of(item),
-            new BigDecimal("300.50"), new BigDecimal("300.50"), now, now
+            new BigDecimal("300.50"), new BigDecimal("300.50"), now, now, null, null
     );
   }
 
@@ -104,6 +104,8 @@ class InvoiceDraftPersistenceAdapterTest {
     dao.setTotal(draft.total());
     dao.setCreatedAt(draft.createdAt());
     dao.setUpdatedAt(draft.updatedAt());
+    dao.setProviderReference(draft.providerReference());
+    dao.setIssuedAt(draft.issuedAt());
     return dao;
   }
 

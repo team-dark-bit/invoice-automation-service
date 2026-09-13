@@ -1,5 +1,7 @@
 package com.invoiceautomationservice.domain.model;
 
 public enum InvoiceDraftStatus {
-  DRAFT
+  DRAFT,
+  APPROVED,
+  ISSUED
 }

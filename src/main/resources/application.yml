@@ -14,3 +14,5 @@ management:
     web:
       exposure:
         include: health,info
+billing:
+  provider: ${BILLING_PROVIDER:mock}

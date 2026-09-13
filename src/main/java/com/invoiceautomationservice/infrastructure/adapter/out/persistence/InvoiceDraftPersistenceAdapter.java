@@ -51,7 +51,7 @@ public class InvoiceDraftPersistenceAdapter implements InvoiceDraftRepository {
     return new InvoiceDraft(
             draft.getId(), draft.getCompanyId(), draft.getCustomerId(), draft.getCurrency(),
             draft.getStatus(), items, draft.getSubtotal(), draft.getTotal(),
-            draft.getCreatedAt(), draft.getUpdatedAt()
+            draft.getCreatedAt(), draft.getUpdatedAt(), draft.getProviderReference(), draft.getIssuedAt()
     );
   }
 }

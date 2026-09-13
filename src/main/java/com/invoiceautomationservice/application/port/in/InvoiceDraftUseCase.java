@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface InvoiceDraftUseCase {
   InvoiceDraftResponse create(CreateInvoiceDraftRequest request);
   InvoiceDraftResponse findById(UUID id);
+  InvoiceDraftResponse approve(UUID id);
+  InvoiceDraftResponse issue(UUID id);
 }

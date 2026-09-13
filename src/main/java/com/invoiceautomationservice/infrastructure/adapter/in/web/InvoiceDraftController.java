@@ -38,4 +38,16 @@ public class InvoiceDraftController {
     InvoiceDraftResponse draft = invoiceDraftUseCase.findById(id);
     return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Invoice draft found", draft));
   }
+
+  @PostMapping("/{id}/approve")
+  public ResponseEntity<ApiResponse<InvoiceDraftResponse>> approve(@PathVariable UUID id) {
+    InvoiceDraftResponse draft = invoiceDraftUseCase.approve(id);
+    return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Invoice draft approved", draft));
+  }
+
+  @PostMapping("/{id}/issue")
+  public ResponseEntity<ApiResponse<InvoiceDraftResponse>> issue(@PathVariable UUID id) {
+    InvoiceDraftResponse draft = invoiceDraftUseCase.issue(id);
+    return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Invoice draft issued", draft));
+  }
 }

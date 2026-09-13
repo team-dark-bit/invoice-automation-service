@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
     "name": "Invoice Automation Service",
-    "description": "Colección versionada para probar los endpoints implementados hasta Release 6. Ejecute las carpetas en el orden mostrado para crear empresa, cliente y borrador.",
+    "description": "Colección versionada para probar los endpoints implementados hasta Release 8. Ejecute las carpetas en el orden mostrado para crear empresa, cliente, borrador, aprobación y emisión mock.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -276,6 +276,55 @@
                 "  pm.expect(draft.id).to.eql(pm.environment.get('invoiceDraftId'));",
                 "  pm.expect(draft.items).to.have.length(2);",
                 "  pm.expect(Number(draft.total)).to.eql(425.625);",
+                "});"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Approve invoice draft",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "approve"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Draft is approved', () => pm.expect(pm.response.json().data.status).to.eql('APPROVED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Issue invoice draft with mock provider",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/issue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "issue"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "const draft = pm.response.json().data;",
+                "pm.test('Draft is issued by mock provider', () => {",
+                "  pm.expect(draft.status).to.eql('ISSUED');",
+                "  pm.expect(draft.providerReference).to.eql(`MOCK-${pm.environment.get('invoiceDraftId')}`);",
+                "  pm.expect(draft.issuedAt).to.be.a('string').and.not.empty;",
                 "});"
               ]
             }

@@ -37,4 +37,8 @@ public class InvoiceDraftDao {
   private Instant createdAt;
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
+  @Column(name = "provider_reference", length = 255)
+  private String providerReference;
+  @Column(name = "issued_at")
+  private Instant issuedAt;
 }

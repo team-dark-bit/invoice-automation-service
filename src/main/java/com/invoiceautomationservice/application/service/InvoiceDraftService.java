@@ -7,10 +7,12 @@ import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRe
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
+import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
+import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
@@ -30,6 +32,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final CompanyRepository companyRepository;
   private final CustomerRepository customerRepository;
+  private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
   private final Clock clock;
 
@@ -58,5 +61,22 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   @Transactional(readOnly = true)
   public InvoiceDraftResponse findById(UUID id) {
     return responseMapper.toResponse(invoiceDraftRepository.findById(id));
+  }
+
+  @Override
+  @Transactional
+  public InvoiceDraftResponse approve(UUID id) {
+    InvoiceDraft approved = invoiceDraftRepository.findById(id).approve(Instant.now(clock));
+    return responseMapper.toResponse(invoiceDraftRepository.save(approved));
+  }
+
+  @Override
+  @Transactional
+  public InvoiceDraftResponse issue(UUID id) {
+    InvoiceDraft approved = invoiceDraftRepository.findById(id);
+    approved.ensureCanBeIssued();
+    BillingResult result = billingProvider.issue(approved);
+    InvoiceDraft issued = approved.markIssued(result.reference(), result.issuedAt());
+    return responseMapper.toResponse(invoiceDraftRepository.save(issued));
   }
 }

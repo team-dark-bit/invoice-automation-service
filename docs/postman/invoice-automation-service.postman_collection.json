@@ -1,0 +1,287 @@
+{
+  "info": {
+    "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
+    "name": "Invoice Automation Service",
+    "description": "Colección versionada para probar los endpoints implementados hasta Release 6. Ejecute las carpetas en el orden mostrado para crear empresa, cliente y borrador.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Comprueba que la aplicación y sus dependencias estén disponibles."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Application is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Companies",
+      "item": [
+        {
+          "name": "Create company",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now().toString();",
+                  "pm.environment.set('taxId', `20${suffix.slice(-9)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Company was created', () => pm.expect(body.data.id).to.be.a('string').and.not.empty);",
+                  "pm.environment.set('companyId', body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"legalName\": \"Postman Test SAC\",\n  \"tradeName\": \"Postman Test\",\n  \"taxId\": \"{{taxId}}\",\n  \"address\": \"Lima\",\n  \"active\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies"]
+            }
+          }
+        },
+        {
+          "name": "Find company by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns requested company', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('companyId')));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "List active companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns an array', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Create customer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('documentNumber', Date.now().toString().slice(-8));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response reports creation', () => pm.expect(pm.response.json().statusCode).to.eql(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Postman Customer\",\n  \"companyName\": \"Postman Test SAC\",\n  \"documentType\": \"DNI\",\n  \"documentNumber\": \"{{documentNumber}}\",\n  \"phoneNumber\": \"999999999\",\n  \"active\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": ["{{baseUrl}}"],
+              "path": ["customers"]
+            }
+          }
+        },
+        {
+          "name": "List active customers and capture ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers",
+              "host": ["{{baseUrl}}"],
+              "path": ["customers"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "const customers = pm.response.json().data;",
+                "const customer = customers.find(item => item.documentNumber === pm.environment.get('documentNumber'));",
+                "pm.test('Created customer is listed', () => pm.expect(customer).to.exist);",
+                "if (customer) pm.environment.set('customerId', customer.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Find customer by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["customers", "{{customerId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns requested customer', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('customerId')));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "Invoice Drafts",
+      "item": [
+        {
+          "name": "Create invoice draft",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\n      \"description\": \"Servicio de consultoría\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 150.25\n    },\n    {\n      \"description\": \"Soporte\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.00\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                "const draft = pm.response.json().data;",
+                "pm.test('Draft has calculated totals', () => {",
+                "  pm.expect(draft.status).to.eql('DRAFT');",
+                "  pm.expect(Number(draft.total)).to.eql(425.625);",
+                "});",
+                "pm.environment.set('invoiceDraftId', draft.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Find invoice draft by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "const draft = pm.response.json().data;",
+                "pm.test('Returns persisted aggregate', () => {",
+                "  pm.expect(draft.id).to.eql(pm.environment.get('invoiceDraftId'));",
+                "  pm.expect(draft.items).to.have.length(2);",
+                "  pm.expect(Number(draft.total)).to.eql(425.625);",
+                "});"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,9 @@ package com.invoiceautomationservice.infrastructure.config.exception;
 
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -14,6 +16,18 @@ public class GlobalExceptionHandler {
       List<String> errors = List.of(ex.getMessage());
       ApiResponse<Void> response = ApiResponse.failure(ex.getStatus().value(), "A problem occurred", errors);
       return new ResponseEntity<>(response, ex.getStatus());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException ex) {
+      List<String> errors = ex.getBindingResult().getFieldErrors().stream()
+              .map(error -> error.getDefaultMessage())
+              .distinct()
+              .toList();
+      ApiResponse<Void> response = ApiResponse.failure(
+              HttpStatus.BAD_REQUEST.value(), "Validation failed", errors
+      );
+      return ResponseEntity.badRequest().body(response);
     }
 
 }

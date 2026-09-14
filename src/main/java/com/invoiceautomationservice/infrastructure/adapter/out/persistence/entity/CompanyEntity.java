@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 @Entity(name = "Company")
 @Table(name = "companies")
-public class CompanyDao {
+public class CompanyEntity {
 
   @Id
   private String id;

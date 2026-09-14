@@ -11,8 +11,8 @@ import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.InvoiceDraftPersistenceAdapter;
-import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.InvoiceDraftDao;
-import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.InvoiceItemDao;
+import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.InvoiceDraftEntity;
+import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.InvoiceItemEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.domain.InvoiceDraftDaoDomainMapper;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.domain.InvoiceItemDaoDomainMapper;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaInvoiceDraftRepository;
@@ -46,8 +46,8 @@ class InvoiceDraftPersistenceAdapterTest {
   @Test
   void persistsDraftAndItemsAsOneAggregate() {
     InvoiceDraft draft = draft();
-    InvoiceDraftDao draftDao = draftDao(draft);
-    InvoiceItemDao itemDao = itemDao(draft.items().getFirst(), draft.id());
+    InvoiceDraftEntity draftDao = draftDao(draft);
+    InvoiceItemEntity itemDao = itemDao(draft.items().getFirst(), draft.id());
     when(draftMapper.toDao(draft)).thenReturn(draftDao);
     when(draftRepository.save(draftDao)).thenReturn(draftDao);
     when(itemMapper.toDao(draft.items().getFirst(), draft.id(), 0)).thenReturn(itemDao);
@@ -64,8 +64,8 @@ class InvoiceDraftPersistenceAdapterTest {
   @Test
   void loadsDraftWithItsItems() {
     InvoiceDraft draft = draft();
-    InvoiceDraftDao draftDao = draftDao(draft);
-    InvoiceItemDao itemDao = itemDao(draft.items().getFirst(), draft.id());
+    InvoiceDraftEntity draftDao = draftDao(draft);
+    InvoiceItemEntity itemDao = itemDao(draft.items().getFirst(), draft.id());
     when(draftRepository.findById(draft.id())).thenReturn(Optional.of(draftDao));
     when(itemRepository.findAllByInvoiceDraftIdOrderByPosition(draft.id())).thenReturn(List.of(itemDao));
     when(itemMapper.toDomain(itemDao)).thenReturn(draft.items().getFirst());
@@ -93,8 +93,8 @@ class InvoiceDraftPersistenceAdapterTest {
     );
   }
 
-  private InvoiceDraftDao draftDao(InvoiceDraft draft) {
-    InvoiceDraftDao dao = new InvoiceDraftDao();
+  private InvoiceDraftEntity draftDao(InvoiceDraft draft) {
+    InvoiceDraftEntity dao = new InvoiceDraftEntity();
     dao.setId(draft.id());
     dao.setCompanyId(draft.companyId());
     dao.setCustomerId(draft.customerId());
@@ -109,8 +109,8 @@ class InvoiceDraftPersistenceAdapterTest {
     return dao;
   }
 
-  private InvoiceItemDao itemDao(InvoiceItem item, UUID draftId) {
-    InvoiceItemDao dao = new InvoiceItemDao();
+  private InvoiceItemEntity itemDao(InvoiceItem item, UUID draftId) {
+    InvoiceItemEntity dao = new InvoiceItemEntity();
     dao.setId(item.id());
     dao.setInvoiceDraftId(draftId);
     dao.setPosition(0);

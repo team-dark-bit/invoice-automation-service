@@ -3,3 +3,7 @@
 /.tooling/
 /jdk25.zip
 *.iml
+/src/main/resources/application-local.yml
+/src/main/resources/inst.txt
+/src/main/resources/logs.log
+/src/main/resources/query.sql

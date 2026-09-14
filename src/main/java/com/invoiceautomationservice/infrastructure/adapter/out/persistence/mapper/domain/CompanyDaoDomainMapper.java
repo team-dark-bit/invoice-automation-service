@@ -1,14 +1,14 @@
 package com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.domain;
 
 import com.invoiceautomationservice.domain.model.Company;
-import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CompanyDao;
+import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CompanyEntity;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring", uses = IdMapper.class)
 public interface CompanyDaoDomainMapper {
-  Company toDomain(CompanyDao dao);
+  Company toDomain(CompanyEntity dao);
 
   @Mapping(target = "id", source = "id", qualifiedByName = "generateId")
-  CompanyDao toDao(Company company);
+  CompanyEntity toDao(Company company);
 }

@@ -10,7 +10,7 @@ import lombok.Setter;
 @Setter
 @Entity(name = "Customer")
 @Table(name = "customers")
-public class CustomerDao {
+public class CustomerEntity {
 
   @Id
   private String id;

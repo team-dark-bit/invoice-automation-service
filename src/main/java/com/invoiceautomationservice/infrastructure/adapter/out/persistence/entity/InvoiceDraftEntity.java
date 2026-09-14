@@ -17,7 +17,7 @@ import lombok.Setter;
 @Setter
 @Entity(name = "InvoiceDraft")
 @Table(name = "invoice_draft")
-public class InvoiceDraftDao {
+public class InvoiceDraftEntity {
   @Id
   private UUID id;
   @Column(name = "company_id", nullable = false, length = 36)

@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.CompanyPersistenceAdapter;
-import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CompanyDao;
+import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CompanyEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.domain.CompanyDaoDomainMapper;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaCompanyRepository;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
@@ -34,7 +34,7 @@ class CompanyPersistenceAdapterTest {
   @Test
   void savesCompany() {
     Company company = company();
-    CompanyDao dao = dao();
+    CompanyEntity dao = dao();
     when(mapper.toDao(company)).thenReturn(dao);
     when(repository.save(dao)).thenReturn(dao);
     when(mapper.toDomain(dao)).thenReturn(company);
@@ -46,7 +46,7 @@ class CompanyPersistenceAdapterTest {
   @Test
   void findsCompanyById() {
     Company company = company();
-    CompanyDao dao = dao();
+    CompanyEntity dao = dao();
     when(repository.findById("company-1")).thenReturn(Optional.of(dao));
     when(mapper.toDomain(dao)).thenReturn(company);
 
@@ -65,7 +65,7 @@ class CompanyPersistenceAdapterTest {
   @Test
   void listsActiveCompanies() {
     Company company = company();
-    CompanyDao dao = dao();
+    CompanyEntity dao = dao();
     when(repository.findAllByActiveTrue()).thenReturn(List.of(dao));
     when(mapper.toDomain(dao)).thenReturn(company);
 
@@ -81,8 +81,8 @@ class CompanyPersistenceAdapterTest {
     return company;
   }
 
-  private CompanyDao dao() {
-    CompanyDao dao = new CompanyDao();
+  private CompanyEntity dao() {
+    CompanyEntity dao = new CompanyEntity();
     dao.setId("company-1");
     dao.setLegalName("Dark Bit SAC");
     dao.setTaxId("20123456789");

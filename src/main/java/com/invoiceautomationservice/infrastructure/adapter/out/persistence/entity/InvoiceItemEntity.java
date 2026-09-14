@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 @Entity(name = "InvoiceItem")
 @Table(name = "invoice_items")
-public class InvoiceItemDao {
+public class InvoiceItemEntity {
   @Id
   private UUID id;
   @Column(name = "invoice_draft_id", nullable = false)

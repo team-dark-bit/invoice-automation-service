@@ -85,15 +85,17 @@ El repositorio incluye una colección ejecutable con todos los endpoints disponi
 Importe ambos archivos en Postman, seleccione el environment `Invoice Automation Service - Local` y ejecute la colección completa en el orden definido. El flujo realiza automáticamente lo siguiente:
 
 1. Comprueba el estado de la aplicación.
-2. Crea una empresa y guarda su ID.
-3. Consulta y lista empresas.
-4. Crea un cliente, lo localiza por su documento y guarda su ID.
-5. Crea un borrador con dos ítems y guarda su ID.
-6. Recupera el borrador persistido y valida sus ítems y totales.
-7. Aprueba el borrador y comprueba su cambio de estado.
-8. Emite el borrador con el proveedor mock y valida la referencia generada.
+2. Inicia sesión con el usuario local creado por Flyway V7 y guarda el JWT.
+3. Consulta los datos del usuario autenticado.
+4. Crea una empresa y guarda su ID.
+5. Consulta y lista empresas.
+6. Crea un cliente, lo localiza por su documento y guarda su ID.
+7. Crea un borrador con dos ítems y guarda su ID.
+8. Recupera el borrador persistido y valida sus ítems y totales.
+9. Aprueba el borrador y comprueba su cambio de estado.
+10. Emite el borrador con el proveedor mock y valida la referencia generada.
 
-Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones. El environment no contiene contraseñas ni otros secretos y puede mantenerse versionado.
+Las credenciales locales iniciales son `haroldqc` / `password`. Son exclusivamente para desarrollo y pueden sobrescribirse en el environment de Postman. Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones.
 
 ## Alcance de Release 1
 

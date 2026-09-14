@@ -2,12 +2,19 @@
   "info": {
     "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
     "name": "Invoice Automation Service",
-    "description": "Colección versionada para probar los endpoints implementados hasta Release 8. Ejecute las carpetas en el orden mostrado para crear empresa, cliente, borrador, aprobación y emisión mock.",
+    "description": "Colección versionada para probar autenticación y los endpoints implementados hasta Release 8. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" }
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "adminUsername", "value": "haroldqc", "type": "string" },
+    { "key": "adminPassword", "value": "password", "type": "string" }
   ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
   "item": [
     {
       "name": "Monitoring",
@@ -15,6 +22,7 @@
         {
           "name": "Health check",
           "request": {
+            "auth": { "type": "noauth" },
             "method": "GET",
             "header": [],
             "url": {
@@ -36,6 +44,67 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login and capture JWT",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Inicia sesión con el usuario creado por Flyway V7 y guarda el JWT para las siguientes peticiones."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "const body = pm.response.json();",
+                "pm.test('JWT was returned', () => pm.expect(body.data.token).to.be.a('string').and.not.empty);",
+                "if (body.data && body.data.token) {",
+                "  pm.environment.set('accessToken', body.data.token);",
+                "  pm.collectionVariables.set('accessToken', body.data.token);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get authenticated user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns authenticated user', () => pm.expect(pm.response.json().data.username).to.eql(pm.environment.get('adminUsername')));"
+              ]
+            }
+          }]
         }
       ]
     },

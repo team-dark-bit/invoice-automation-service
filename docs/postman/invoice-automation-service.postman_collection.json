@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
     "name": "Invoice Automation Service",
-    "description": "Colección versionada para probar autenticación y los endpoints implementados hasta Release 8. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
+    "description": "Colección versionada para probar autenticación, aislamiento multiempresa y los endpoints implementados hasta Release 8. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -226,7 +226,10 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"fullName\": \"Postman Customer\",\n  \"companyName\": \"Postman Test SAC\",\n  \"documentType\": \"DNI\",\n  \"documentNumber\": \"{{documentNumber}}\",\n  \"phoneNumber\": \"999999999\",\n  \"active\": true\n}",
@@ -243,7 +246,7 @@
           "name": "List active customers and capture ID",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [{ "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }],
             "url": {
               "raw": "{{baseUrl}}/customers",
               "host": ["{{baseUrl}}"],
@@ -268,7 +271,7 @@
           "name": "Find customer by ID",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [{ "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }],
             "url": {
               "raw": "{{baseUrl}}/customers/{{customerId}}",
               "host": ["{{baseUrl}}"],

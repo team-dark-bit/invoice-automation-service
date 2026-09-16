@@ -5,8 +5,8 @@ import com.invoiceautomationservice.application.dto.response.CustomerResponse;
 import java.util.List;
 
 public interface CustomerUseCase {
-  void create(CreateCustomerRequest createCustomerRequest);
-  CustomerResponse findById(String customerId);
-  List<CustomerResponse> findAll();
+  void create(CreateCustomerRequest createCustomerRequest, String requestedCompanyId);
+  CustomerResponse findById(String customerId, String requestedCompanyId);
+  List<CustomerResponse> findAll(String requestedCompanyId);
 }
 

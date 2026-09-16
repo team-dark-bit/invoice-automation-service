@@ -5,5 +5,5 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaCompanyRepository extends JpaRepository<CompanyEntity, String> {
-  List<CompanyEntity> findAllByActiveTrue();
+  List<CompanyEntity> findAllByIdInAndActiveTrue(List<String> ids);
 }

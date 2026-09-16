@@ -97,6 +97,18 @@ Importe ambos archivos en Postman, seleccione el environment `Invoice Automation
 
 Las credenciales locales iniciales son `haroldqc` / `password`. Son exclusivamente para desarrollo y pueden sobrescribirse en el environment de Postman. Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones.
 
+## Aislamiento multiempresa
+
+Cada empresa creada queda asociada automáticamente al usuario autenticado. Las consultas de empresas, clientes y borradores verifican esa pertenencia y responden como recurso inexistente cuando el identificador pertenece a otro usuario, evitando revelar datos entre negocios.
+
+Los clientes pertenecen a una empresa concreta. Si el usuario tiene una sola empresa, el backend puede resolverla automáticamente. Cuando tiene varias, debe enviar el contexto mediante el header:
+
+```http
+X-Company-Id: <companyId>
+```
+
+La colección Postman configura este header automáticamente con la empresa creada durante el flujo. Los borradores siguen recibiendo `companyId`, pero el backend valida que la empresa y el cliente pertenezcan al usuario autenticado y al mismo tenant.
+
 ## Alcance de Release 1
 
 Establece la base técnica y las convenciones sobre las que se construyen los siguientes releases:

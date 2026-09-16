@@ -34,16 +34,18 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   private final CustomerRepository customerRepository;
   private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
+  private final CompanyAccessService companyAccessService;
   private final Clock clock;
 
   @Override
   @Transactional
   public InvoiceDraftResponse create(CreateInvoiceDraftRequest request) {
+    companyAccessService.requireAccess(request.companyId());
     Company company = companyRepository.findById(request.companyId());
     if (!company.isActive()) {
       throw new ApplicationException(COMPANY_INACTIVE, request.companyId());
     }
-    Customer customer = customerRepository.findById(request.customerId());
+    Customer customer = customerRepository.findByIdAndCompanyId(request.customerId(), request.companyId());
     if (!customer.isActive()) {
       throw new ApplicationException(CUSTOMER_INACTIVE, request.customerId());
     }
@@ -60,13 +62,17 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   @Override
   @Transactional(readOnly = true)
   public InvoiceDraftResponse findById(UUID id) {
-    return responseMapper.toResponse(invoiceDraftRepository.findById(id));
+    InvoiceDraft draft = invoiceDraftRepository.findById(id);
+    companyAccessService.requireAccess(draft.companyId());
+    return responseMapper.toResponse(draft);
   }
 
   @Override
   @Transactional
   public InvoiceDraftResponse approve(UUID id) {
-    InvoiceDraft approved = invoiceDraftRepository.findById(id).approve(Instant.now(clock));
+    InvoiceDraft draft = invoiceDraftRepository.findById(id);
+    companyAccessService.requireAccess(draft.companyId());
+    InvoiceDraft approved = draft.approve(Instant.now(clock));
     return responseMapper.toResponse(invoiceDraftRepository.save(approved));
   }
 
@@ -74,6 +80,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   @Transactional
   public InvoiceDraftResponse issue(UUID id) {
     InvoiceDraft approved = invoiceDraftRepository.findById(id);
+    companyAccessService.requireAccess(approved.companyId());
     approved.ensureCanBeIssued();
     BillingResult result = billingProvider.issue(approved);
     InvoiceDraft issued = approved.markIssued(result.reference(), result.issuedAt());

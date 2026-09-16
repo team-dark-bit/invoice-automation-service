@@ -8,6 +8,7 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "spring")
 public interface CustomerRequestDomainMapper {
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "companyId", ignore = true)
     Customer fromRequest(CreateCustomerRequest createCustomerRequest);
 }
 

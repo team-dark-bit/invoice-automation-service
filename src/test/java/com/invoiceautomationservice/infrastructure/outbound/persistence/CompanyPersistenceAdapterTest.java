@@ -66,10 +66,10 @@ class CompanyPersistenceAdapterTest {
   void listsActiveCompanies() {
     Company company = company();
     CompanyEntity dao = dao();
-    when(repository.findAllByActiveTrue()).thenReturn(List.of(dao));
+    when(repository.findAllByIdInAndActiveTrue(List.of("company-1"))).thenReturn(List.of(dao));
     when(mapper.toDomain(dao)).thenReturn(company);
 
-    assertThat(adapter.findAllByActiveTrue()).containsExactly(company);
+    assertThat(adapter.findAllByIdInAndActiveTrue(List.of("company-1"))).containsExactly(company);
   }
 
   private Company company() {

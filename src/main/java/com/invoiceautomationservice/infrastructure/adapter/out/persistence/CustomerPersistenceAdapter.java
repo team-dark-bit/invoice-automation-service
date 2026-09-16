@@ -24,15 +24,15 @@ public class CustomerPersistenceAdapter implements CustomerRepository {
   }
 
   @Override
-  public Customer findById(String id) {
-    return jpaCustomerRepository.findById(id)
+  public Customer findByIdAndCompanyId(String id, String companyId) {
+    return jpaCustomerRepository.findByIdAndCompanyId(id, companyId)
             .map(customerDaoDomainMapper::toDomain)
             .orElseThrow(() -> new ApplicationException(CUSTOMER_NOT_FOUND, id));
   }
 
   @Override
-  public List<Customer> findAllByActiveTrue() {
-    return jpaCustomerRepository.findAllByActiveTrue()
+  public List<Customer> findAllByCompanyIdAndActiveTrue(String companyId) {
+    return jpaCustomerRepository.findAllByCompanyIdAndActiveTrue(companyId)
             .stream()
             .map(customerDaoDomainMapper::toDomain)
             .toList();

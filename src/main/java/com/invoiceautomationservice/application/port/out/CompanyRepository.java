@@ -6,5 +6,5 @@ import java.util.List;
 public interface CompanyRepository {
   Company save(Company company);
   Company findById(String id);
-  List<Company> findAllByActiveTrue();
+  List<Company> findAllByIdInAndActiveTrue(List<String> ids);
 }

@@ -17,20 +17,26 @@ public class CustomerService implements CustomerUseCase {
   private final CustomerRepository customerRepository;
   private final CustomerRequestDomainMapper domainRequestMapper;
   private final CustomerDomainResponseMapper domainResponseMapper;
+  private final CompanyAccessService companyAccessService;
 
   @Override
-  public void create(CreateCustomerRequest createCustomerRequest) {
-    customerRepository.save(domainRequestMapper.fromRequest(createCustomerRequest));
+  public void create(CreateCustomerRequest createCustomerRequest, String requestedCompanyId) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    var customer = domainRequestMapper.fromRequest(createCustomerRequest);
+    customer.setCompanyId(companyId);
+    customerRepository.save(customer);
   }
 
   @Override
-  public CustomerResponse findById(String customerId) {
-    return domainResponseMapper.toResponse(customerRepository.findById(customerId));
+  public CustomerResponse findById(String customerId, String requestedCompanyId) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    return domainResponseMapper.toResponse(customerRepository.findByIdAndCompanyId(customerId, companyId));
   }
 
   @Override
-  public List<CustomerResponse> findAll() {
-    return customerRepository.findAllByActiveTrue()
+  public List<CustomerResponse> findAll(String requestedCompanyId) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    return customerRepository.findAllByCompanyIdAndActiveTrue(companyId)
             .stream()
             .map(domainResponseMapper::toResponse)
             .toList();

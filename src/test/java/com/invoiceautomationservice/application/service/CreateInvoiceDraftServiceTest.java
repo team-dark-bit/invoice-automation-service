@@ -40,6 +40,7 @@ class CreateInvoiceDraftServiceTest {
   private InvoiceDraftDomainResponseMapper mapper;
   private BillingProvider billingProvider;
   private InvoiceDraftService service;
+  private CompanyAccessService accessService;
 
   @BeforeEach
   void setUp() {
@@ -48,9 +49,11 @@ class CreateInvoiceDraftServiceTest {
     customerRepository = mock(CustomerRepository.class);
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
     billingProvider = mock(BillingProvider.class);
+    accessService = mock(CompanyAccessService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     service = new InvoiceDraftService(
-            draftRepository, companyRepository, customerRepository, billingProvider, mapper, clock
+            draftRepository, companyRepository, customerRepository, billingProvider, mapper,
+            accessService, clock
     );
   }
 
@@ -58,7 +61,8 @@ class CreateInvoiceDraftServiceTest {
   void createsCompleteDraftAndCalculatesTotals() {
     CreateInvoiceDraftRequest request = request();
     when(companyRepository.findById("company-1")).thenReturn(company(true));
-    when(customerRepository.findById("customer-1")).thenReturn(customer(true));
+    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
+            .thenReturn(customer(true));
     when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(mapper.toResponse(any(InvoiceDraft.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
 
@@ -73,6 +77,7 @@ class CreateInvoiceDraftServiceTest {
     assertThat(result.total()).isEqualByComparingTo("350.50");
     assertThat(result.createdAt()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
     verify(draftRepository).save(any(InvoiceDraft.class));
+    verify(accessService).requireAccess("company-1");
   }
 
   @Test
@@ -87,7 +92,8 @@ class CreateInvoiceDraftServiceTest {
   @Test
   void rejectsInactiveCustomer() {
     when(companyRepository.findById("company-1")).thenReturn(company(true));
-    when(customerRepository.findById("customer-1")).thenReturn(customer(false));
+    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
+            .thenReturn(customer(false));
 
     assertThatThrownBy(() -> service.create(request()))
             .isInstanceOf(ApplicationException.class)
@@ -102,6 +108,7 @@ class CreateInvoiceDraftServiceTest {
     when(mapper.toResponse(draft)).thenReturn(response);
 
     assertThat(service.findById(draft.id())).isSameAs(response);
+    verify(accessService).requireAccess("company-1");
   }
 
   @Test

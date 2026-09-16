@@ -2,9 +2,11 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence.repo
 
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CustomerEntity;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaCustomerRepository extends JpaRepository<CustomerEntity, String> {
-    List<CustomerEntity> findAllByActiveTrue();
+    Optional<CustomerEntity> findByIdAndCompanyId(String id, String companyId);
+    List<CustomerEntity> findAllByCompanyIdAndActiveTrue(String companyId);
 }
 

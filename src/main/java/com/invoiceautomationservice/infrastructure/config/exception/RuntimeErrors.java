@@ -12,7 +12,9 @@ public enum RuntimeErrors implements ApplicationError {
     COMPANY_NOT_FOUND(NOT_FOUND, "The company with id: %s does not exist"),
     INVOICE_DRAFT_NOT_FOUND(NOT_FOUND, "The invoice draft with id: %s does not exist"),
     COMPANY_INACTIVE(BAD_REQUEST, "The company with id: %s is inactive"),
-    CUSTOMER_INACTIVE(BAD_REQUEST, "The customer with id: %s is inactive");
+    CUSTOMER_INACTIVE(BAD_REQUEST, "The customer with id: %s is inactive"),
+    COMPANY_CONTEXT_REQUIRED(BAD_REQUEST,
+            "X-Company-Id is required when the user does not have exactly one company");
 
     private final HttpStatus status;
     private final String message;

@@ -5,7 +5,7 @@ import java.util.List;
 
 public interface CustomerRepository {
   void save(Customer customer);
-  Customer findById(String id);
-  List<Customer> findAllByActiveTrue();
+  Customer findByIdAndCompanyId(String id, String companyId);
+  List<Customer> findAllByCompanyIdAndActiveTrue(String companyId);
 }
 

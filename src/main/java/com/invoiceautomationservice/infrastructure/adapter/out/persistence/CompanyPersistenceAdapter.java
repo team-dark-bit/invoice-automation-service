@@ -31,8 +31,8 @@ public class CompanyPersistenceAdapter implements CompanyRepository {
   }
 
   @Override
-  public List<Company> findAllByActiveTrue() {
-    return jpaCompanyRepository.findAllByActiveTrue().stream()
+  public List<Company> findAllByIdInAndActiveTrue(List<String> ids) {
+    return jpaCompanyRepository.findAllByIdInAndActiveTrue(ids).stream()
             .map(mapper::toDomain)
             .toList();
   }

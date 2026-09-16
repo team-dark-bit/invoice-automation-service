@@ -21,13 +21,15 @@ class CompanyServiceTest {
   private CompanyRequestDomainMapper requestMapper;
   private CompanyDomainResponseMapper responseMapper;
   private CompanyService service;
+  private CompanyAccessService accessService;
 
   @BeforeEach
   void setUp() {
     repository = mock(CompanyRepository.class);
     requestMapper = mock(CompanyRequestDomainMapper.class);
     responseMapper = mock(CompanyDomainResponseMapper.class);
-    service = new CompanyService(repository, requestMapper, responseMapper);
+    accessService = mock(CompanyAccessService.class);
+    service = new CompanyService(repository, requestMapper, responseMapper, accessService);
   }
 
   @Test
@@ -43,6 +45,7 @@ class CompanyServiceTest {
 
     assertThat(service.create(request)).isSameAs(response);
     verify(repository).save(company);
+    verify(accessService).associateCurrentUser("company-1");
   }
 
   @Test
@@ -53,6 +56,7 @@ class CompanyServiceTest {
     when(responseMapper.toResponse(company)).thenReturn(response);
 
     assertThat(service.findById("company-1")).isSameAs(response);
+    verify(accessService).requireAccess("company-1");
   }
 
   @Test
@@ -61,7 +65,9 @@ class CompanyServiceTest {
     Company second = company("company-2", "Invoice SAC");
     CompanyResponse firstResponse = response("company-1", "Dark Bit SAC");
     CompanyResponse secondResponse = response("company-2", "Invoice SAC");
-    when(repository.findAllByActiveTrue()).thenReturn(List.of(first, second));
+    when(accessService.currentCompanyIds()).thenReturn(List.of("company-1", "company-2"));
+    when(repository.findAllByIdInAndActiveTrue(List.of("company-1", "company-2")))
+            .thenReturn(List.of(first, second));
     when(responseMapper.toResponse(first)).thenReturn(firstResponse);
     when(responseMapper.toResponse(second)).thenReturn(secondResponse);
 

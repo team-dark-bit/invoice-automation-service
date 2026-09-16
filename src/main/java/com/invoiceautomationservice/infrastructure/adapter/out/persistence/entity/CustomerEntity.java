@@ -1,6 +1,7 @@
 package com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -14,6 +15,9 @@ public class CustomerEntity {
 
   @Id
   private String id;
+
+  @Column(name = "company_id", nullable = false)
+  private String companyId;
 
   private String fullName;
   private String companyName;

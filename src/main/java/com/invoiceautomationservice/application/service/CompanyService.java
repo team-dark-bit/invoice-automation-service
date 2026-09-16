@@ -9,6 +9,7 @@ import com.invoiceautomationservice.application.service.mapper.CompanyRequestDom
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,20 +18,25 @@ public class CompanyService implements CompanyUseCase {
   private final CompanyRepository companyRepository;
   private final CompanyRequestDomainMapper requestMapper;
   private final CompanyDomainResponseMapper responseMapper;
+  private final CompanyAccessService companyAccessService;
 
   @Override
+  @Transactional
   public CompanyResponse create(CreateCompanyRequest request) {
-    return responseMapper.toResponse(companyRepository.save(requestMapper.fromRequest(request)));
+    var company = companyRepository.save(requestMapper.fromRequest(request));
+    companyAccessService.associateCurrentUser(company.getId());
+    return responseMapper.toResponse(company);
   }
 
   @Override
   public CompanyResponse findById(String companyId) {
+    companyAccessService.requireAccess(companyId);
     return responseMapper.toResponse(companyRepository.findById(companyId));
   }
 
   @Override
   public List<CompanyResponse> findAll() {
-    return companyRepository.findAllByActiveTrue().stream()
+    return companyRepository.findAllByIdInAndActiveTrue(companyAccessService.currentCompanyIds()).stream()
             .map(responseMapper::toResponse)
             .toList();
   }

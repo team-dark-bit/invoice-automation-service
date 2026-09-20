@@ -169,6 +169,8 @@ class InvoiceDraftControllerTest {
         "B001-00000001", draft.recipientDocumentType(), draft.recipientDocumentNumber(),
         draft.currency(), draft.items(), draft.subtotal(), BigDecimal.ZERO,
         new BigDecimal("300.50"), new BigDecimal("54.09"), new BigDecimal("354.59"),
-        "MOCK-B001-00000001", Instant.parse("2026-09-01T11:00:00Z"));
+        com.invoiceautomationservice.domain.model.ElectronicDocumentStatus.ACCEPTED,
+        "MOCK-B001-00000001", Instant.parse("2026-09-01T11:00:00Z"),
+        Instant.parse("2026-09-01T11:00:00Z"), "0", "Accepted");
   }
 }

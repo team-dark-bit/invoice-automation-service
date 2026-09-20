@@ -22,10 +22,14 @@ class ElectronicDocumentTest {
     ElectronicDocument provisional = ElectronicDocument.from(draft, new DocumentNumber("B001", 1));
     source.clear();
 
-    ElectronicDocument issued = provisional.issued(
-        new BillingResult("MOCK-B001-00000001", Instant.parse("2026-09-20T10:00:00Z")));
+    Instant submittedAt = Instant.parse("2026-09-20T10:00:00Z");
+    ElectronicDocument issued = provisional.withBillingResult(new BillingResult(
+        "MOCK-B001-00000001", ElectronicDocumentStatus.ACCEPTED,
+        submittedAt, submittedAt, "0", "Accepted"));
 
     assertThat(provisional.providerReference()).isNull();
+    assertThat(provisional.status()).isEqualTo(ElectronicDocumentStatus.PENDING_SEND);
+    assertThat(issued.status()).isEqualTo(ElectronicDocumentStatus.ACCEPTED);
     assertThat(issued.fullNumber()).isEqualTo("B001-00000001");
     assertThat(issued.items()).hasSize(1);
     assertThatThrownBy(() -> issued.items().clear())

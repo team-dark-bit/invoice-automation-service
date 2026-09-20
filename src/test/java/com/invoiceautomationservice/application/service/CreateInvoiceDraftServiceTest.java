@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
@@ -16,12 +17,15 @@ import com.invoiceautomationservice.application.dto.response.ElectronicDocumentR
 import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
 import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
+import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
+import com.invoiceautomationservice.domain.model.BillingSubmission;
+import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
@@ -29,6 +33,8 @@ import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.DocumentNumber;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
+import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
+import com.invoiceautomationservice.domain.model.TaxpayerType;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -43,6 +49,7 @@ class CreateInvoiceDraftServiceTest {
 
   private InvoiceDraftRepository draftRepository;
   private CompanyRepository companyRepository;
+  private CustomerRepository customerRepository;
   private IssuerTaxProfileRepository issuerTaxProfileRepository;
   private RecipientResolutionService recipientResolutionService;
   private InvoiceDraftDomainResponseMapper mapper;
@@ -57,6 +64,7 @@ class CreateInvoiceDraftServiceTest {
   void setUp() {
     draftRepository = mock(InvoiceDraftRepository.class);
     companyRepository = mock(CompanyRepository.class);
+    customerRepository = mock(CustomerRepository.class);
     issuerTaxProfileRepository = mock(IssuerTaxProfileRepository.class);
     recipientResolutionService = mock(RecipientResolutionService.class);
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
@@ -67,7 +75,7 @@ class CreateInvoiceDraftServiceTest {
     electronicDocumentService = mock(ElectronicDocumentService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     service = new InvoiceDraftService(
-            draftRepository, companyRepository, billingProvider, mapper, accessService,
+            draftRepository, companyRepository, customerRepository, billingProvider, mapper, accessService,
             issuerTaxProfileRepository, recipientResolutionService, documentSeriesRepository,
             electronicDocumentRepository, electronicDocumentService, clock
     );
@@ -147,12 +155,17 @@ class CreateInvoiceDraftServiceTest {
   void issuesApprovedDraftThroughBillingProvider() {
     InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
     BillingResult billingResult = new BillingResult(
-            "MOCK-" + approved.id(), Instant.parse("2026-09-01T10:00:00Z")
-    );
+        "MOCK-" + approved.id(), ElectronicDocumentStatus.ACCEPTED,
+        Instant.parse("2026-09-01T10:00:00Z"), Instant.parse("2026-09-01T10:00:00Z"),
+        "0", "Accepted");
     when(draftRepository.findById(approved.id())).thenReturn(approved);
+    when(companyRepository.findById("company-1")).thenReturn(company(true));
+    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
+        .thenReturn(customer(true));
+    when(issuerTaxProfileRepository.findByCompanyId("company-1")).thenReturn(taxProfile());
     when(documentSeriesRepository.reserveNext("company-1", InvoiceDocumentType.SALES_RECEIPT))
             .thenReturn(new DocumentNumber("B001", 1));
-    when(billingProvider.issue(any(ElectronicDocument.class))).thenReturn(billingResult);
+    when(billingProvider.submit(any(BillingSubmission.class))).thenReturn(billingResult);
     when(electronicDocumentRepository.save(any(ElectronicDocument.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
     when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -162,8 +175,8 @@ class CreateInvoiceDraftServiceTest {
     ElectronicDocumentResponse result = service.issue(approved.id());
 
     assertThat(result).isSameAs(documentResponse);
-    verify(billingProvider).issue(any(ElectronicDocument.class));
-    verify(electronicDocumentRepository).save(any(ElectronicDocument.class));
+    verify(billingProvider).submit(any(BillingSubmission.class));
+    verify(electronicDocumentRepository, times(2)).save(any(ElectronicDocument.class));
   }
 
   @Test
@@ -197,6 +210,9 @@ class CreateInvoiceDraftServiceTest {
   private Company company(boolean active) {
     Company company = new Company();
     company.setId("company-1");
+    company.setTaxId("20123456789");
+    company.setLegalName("Company SAC");
+    company.setTradeName("Company");
     company.setActive(active);
     return company;
   }
@@ -205,8 +221,16 @@ class CreateInvoiceDraftServiceTest {
     Customer customer = new Customer();
     customer.setId("customer-1");
     customer.setCompanyId("company-1");
+    customer.setFullName("Customer Name");
     customer.setActive(active);
     return customer;
+  }
+
+  private IssuerTaxProfile taxProfile() {
+    Instant now = Instant.parse("2026-09-01T10:00:00Z");
+    return new IssuerTaxProfile(
+        "company-1", TaxpayerType.LEGAL_ENTITY, "Lima", "150101",
+        "Lima", "Lima", "Lima", "PE", now, now);
   }
 
   private InvoiceDraftResponse response(InvoiceDraft draft) {

@@ -7,6 +7,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,5 +22,13 @@ public class ElectronicDocumentController {
   public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> findById(@PathVariable UUID id) {
     return ResponseEntity.ok(ApiResponse.success(
         200, "Electronic document found", service.findById(id)));
+  }
+
+  @PostMapping("/{id}/refresh-status")
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> refreshStatus(
+      @PathVariable UUID id) {
+    ElectronicDocumentResponse document = service.refreshStatus(id);
+    return ResponseEntity.ok(ApiResponse.success(
+        200, "Electronic document status refreshed", document));
   }
 }

@@ -135,6 +135,19 @@ Las series se configuran por empresa y tipo mediante `POST /api/v1/companies/{id
 
 La emisión crea un `ElectronicDocument` separado del borrador. Este objeto conserva una copia inmutable del receptor, ítems, impuestos, serie, correlativo, número completo y respuesta del proveedor. Puede consultarse mediante `GET /api/v1/electronic-documents/{id}`; no existe API para modificarlo.
 
+### Envío y aceptación del proveedor
+
+El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.
+
+`POST /api/v1/electronic-documents/{id}/refresh-status` consulta nuevamente un documento enviado. Los estados `ACCEPTED` y `REJECTED` son finales y no generan llamadas adicionales.
+
+El puerto `BillingProvider` expone dos operaciones neutrales al proveedor:
+
+- `submit(BillingSubmission)`, con emisor, receptor, comprobante, ítems e importes tributarios completos;
+- `checkStatus(providerReference)`, para proveedores con procesamiento asíncrono.
+
+La integración real debe implementar únicamente este puerto y mapear `BillingSubmission` al JSON externo. Se activa mediante `BILLING_PROVIDER`; mientras no exista el adaptador real se utiliza `mock`.
+
 ## Alcance de Release 1
 
 Establece la base técnica y las convenciones sobre las que se construyen los siguientes releases:

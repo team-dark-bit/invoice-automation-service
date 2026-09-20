@@ -540,7 +540,9 @@
                 "pm.test('Electronic document is immutable and numbered', () => {",
                 "  pm.expect(document.fullNumber).to.match(/^B001-\\d{8}$/);",
                 "  pm.expect(document.providerReference).to.eql(`MOCK-${document.fullNumber}`);",
-                "  pm.expect(document.issuedAt).to.be.a('string').and.not.empty;",
+                "  pm.expect(document.status).to.eql('ACCEPTED');",
+                "  pm.expect(document.submittedAt).to.be.a('string').and.not.empty;",
+                "  pm.expect(document.respondedAt).to.be.a('string').and.not.empty;",
                 "});"
                 ,"pm.environment.set('electronicDocumentId', document.id);"
               ]
@@ -565,6 +567,29 @@
               "exec": [
                 "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
                 "pm.test('Returns immutable document', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('electronicDocumentId')));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Refresh provider delivery status",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}/refresh-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "electronic-documents", "{{electronicDocumentId}}", "refresh-status"]
+            },
+            "description": "Consulta al proveedor y sincroniza SENT, ACCEPTED, REJECTED o ERROR. Los estados finales no vuelven a consultarse."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Provider status is available', () => pm.expect(['SENT', 'ACCEPTED', 'REJECTED', 'ERROR']).to.include(pm.response.json().data.status));"
               ]
             }
           }]

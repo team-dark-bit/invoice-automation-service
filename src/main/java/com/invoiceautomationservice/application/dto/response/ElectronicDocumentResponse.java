@@ -2,6 +2,7 @@ package com.invoiceautomationservice.application.dto.response;
 
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -25,7 +26,11 @@ public record ElectronicDocumentResponse(
     BigDecimal taxableTotal,
     BigDecimal taxTotal,
     BigDecimal total,
+    ElectronicDocumentStatus status,
     String providerReference,
-    Instant issuedAt
+    Instant submittedAt,
+    Instant respondedAt,
+    String providerResponseCode,
+    String providerResponseMessage
 ) {
 }

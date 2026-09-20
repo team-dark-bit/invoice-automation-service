@@ -2,6 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence.enti
 
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -40,6 +41,11 @@ public class ElectronicDocumentEntity {
   @Column(name = "tax_total", nullable = false, precision = 20, scale = 2)
   private BigDecimal taxTotal;
   @Column(nullable = false, precision = 20, scale = 2) private BigDecimal total;
-  @Column(name = "provider_reference", nullable = false) private String providerReference;
-  @Column(name = "issued_at", nullable = false) private Instant issuedAt;
+  @Enumerated(EnumType.STRING) @Column(nullable = false)
+  private ElectronicDocumentStatus status;
+  @Column(name = "provider_reference") private String providerReference;
+  @Column(name = "submitted_at") private Instant submittedAt;
+  @Column(name = "responded_at") private Instant respondedAt;
+  @Column(name = "provider_response_code", length = 100) private String providerResponseCode;
+  @Column(name = "provider_response_message", length = 1000) private String providerResponseMessage;
 }

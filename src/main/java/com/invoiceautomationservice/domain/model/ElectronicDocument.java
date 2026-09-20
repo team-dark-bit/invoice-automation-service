@@ -24,8 +24,12 @@ public record ElectronicDocument(
     BigDecimal taxableTotal,
     BigDecimal taxTotal,
     BigDecimal total,
+    ElectronicDocumentStatus status,
     String providerReference,
-    Instant issuedAt
+    Instant submittedAt,
+    Instant respondedAt,
+    String providerResponseCode,
+    String providerResponseMessage
 ) {
   public ElectronicDocument {
     Objects.requireNonNull(id);
@@ -38,9 +42,11 @@ public record ElectronicDocument(
     Objects.requireNonNull(recipientDocumentType);
     Objects.requireNonNull(recipientDocumentNumber);
     Objects.requireNonNull(currency);
+    Objects.requireNonNull(status);
     items = List.copyOf(items);
-    if ((providerReference == null) != (issuedAt == null)) {
-      throw new IllegalArgumentException("provider reference and issuedAt must be provided together");
+    if (status == ElectronicDocumentStatus.PENDING_SEND
+        && (providerReference != null || submittedAt != null)) {
+      throw new IllegalArgumentException("a pending document cannot contain provider submission data");
     }
   }
 
@@ -49,13 +55,20 @@ public record ElectronicDocument(
         UUID.randomUUID(), draft.id(), draft.companyId(), draft.customerId(), draft.documentType(),
         number.series(), number.correlative(), number.fullNumber(), draft.recipientDocumentType(),
         draft.recipientDocumentNumber(), draft.currency(), draft.items(), draft.subtotal(),
-        draft.discountTotal(), draft.taxableTotal(), draft.taxTotal(), draft.total(), null, null);
+        draft.discountTotal(), draft.taxableTotal(), draft.taxTotal(), draft.total(),
+        ElectronicDocumentStatus.PENDING_SEND, null, null, null, null, null);
   }
 
-  public ElectronicDocument issued(BillingResult result) {
+  public ElectronicDocument withBillingResult(BillingResult result) {
+    if (status == ElectronicDocumentStatus.ACCEPTED
+        || status == ElectronicDocumentStatus.REJECTED) {
+      throw new IllegalStateException("a document with final provider status cannot be changed");
+    }
     return new ElectronicDocument(
         id, draftId, companyId, customerId, documentType, series, correlative, fullNumber,
         recipientDocumentType, recipientDocumentNumber, currency, items, subtotal, discountTotal,
-        taxableTotal, taxTotal, total, result.reference(), result.issuedAt());
+        taxableTotal, taxTotal, total, result.status(), result.reference(),
+        submittedAt == null ? result.submittedAt() : submittedAt,
+        result.respondedAt(), result.responseCode(), result.responseMessage());
   }
 }

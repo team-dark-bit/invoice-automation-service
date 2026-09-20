@@ -1,8 +1,10 @@
 package com.invoiceautomationservice.application.port.out;
 
 import com.invoiceautomationservice.domain.model.BillingResult;
-import com.invoiceautomationservice.domain.model.ElectronicDocument;
+import com.invoiceautomationservice.domain.model.BillingSubmission;
 
 public interface BillingProvider {
-  BillingResult issue(ElectronicDocument document);
+  BillingResult submit(BillingSubmission submission);
+
+  BillingResult checkStatus(String providerReference);
 }

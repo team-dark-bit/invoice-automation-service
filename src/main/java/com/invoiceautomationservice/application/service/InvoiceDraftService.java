@@ -18,13 +18,16 @@ import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepos
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
+import com.invoiceautomationservice.domain.model.BillingSubmission;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
+import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -40,6 +43,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final CompanyRepository companyRepository;
+  private final CustomerRepository customerRepository;
   private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
   private final CompanyAccessService companyAccessService;
@@ -110,11 +114,46 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     var documentNumber = documentSeriesRepository.reserveNext(
         approved.companyId(), approved.documentType());
     ElectronicDocument provisional = ElectronicDocument.from(approved, documentNumber);
-    BillingResult result = billingProvider.issue(provisional);
-    ElectronicDocument issuedDocument = provisional.issued(result);
+    electronicDocumentRepository.save(provisional);
+    Company company = companyRepository.findById(approved.companyId());
+    Customer customer = customerRepository.findByIdAndCompanyId(
+        approved.customerId(), approved.companyId());
+    IssuerTaxProfile taxProfile = issuerTaxProfileRepository.findByCompanyId(approved.companyId());
+    BillingResult result = billingProvider.submit(toBillingSubmission(
+        provisional, company, customer, taxProfile));
+    ElectronicDocument issuedDocument = provisional.withBillingResult(result);
     ElectronicDocument savedDocument = electronicDocumentRepository.save(issuedDocument);
-    InvoiceDraft issued = approved.markIssued(result.reference(), result.issuedAt());
-    invoiceDraftRepository.save(issued);
+    if (result.status() == ElectronicDocumentStatus.SENT
+        || result.status() == ElectronicDocumentStatus.ACCEPTED) {
+      InvoiceDraft issued = approved.markIssued(result.reference(), result.submittedAt());
+      invoiceDraftRepository.save(issued);
+    }
     return electronicDocumentService.toResponse(savedDocument);
+  }
+
+  private BillingSubmission toBillingSubmission(
+      ElectronicDocument document,
+      Company company,
+      Customer customer,
+      IssuerTaxProfile profile) {
+    BillingSubmission.Issuer issuer = new BillingSubmission.Issuer(
+        company.getTaxId(), company.getLegalName(), company.getTradeName(),
+        profile.taxpayerType(), profile.fiscalAddress(), profile.ubigeo(), profile.department(),
+        profile.province(), profile.district(), profile.countryCode());
+    String recipientName = customer.getCompanyName() == null || customer.getCompanyName().isBlank()
+        ? customer.getFullName() : customer.getCompanyName();
+    BillingSubmission.Recipient recipient = new BillingSubmission.Recipient(
+        document.recipientDocumentType(), document.recipientDocumentNumber(), recipientName);
+    List<BillingSubmission.Item> providerItems = document.items().stream()
+        .map(item -> new BillingSubmission.Item(
+            item.description(), item.unitCode(), item.quantity(), item.unitPrice(), item.discount(),
+            item.taxAffectation(), item.taxRate(), item.grossAmount(), item.taxableAmount(),
+            item.taxAmount(), item.lineTotal()))
+        .toList();
+    return new BillingSubmission(
+        document.id(), document.fullNumber(), document.series(), document.correlative(),
+        document.documentType(), document.currency(),
+        issuer, recipient, providerItems, document.subtotal(), document.discountTotal(),
+        document.taxableTotal(), document.taxTotal(), document.total());
   }
 }

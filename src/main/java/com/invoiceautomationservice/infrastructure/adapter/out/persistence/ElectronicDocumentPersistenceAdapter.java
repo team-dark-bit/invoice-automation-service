@@ -50,7 +50,10 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
     e.setRecipientDocumentNumber(document.recipientDocumentNumber()); e.setCurrency(document.currency());
     e.setSubtotal(document.subtotal()); e.setDiscountTotal(document.discountTotal());
     e.setTaxableTotal(document.taxableTotal()); e.setTaxTotal(document.taxTotal()); e.setTotal(document.total());
-    e.setProviderReference(document.providerReference()); e.setIssuedAt(document.issuedAt());
+    e.setStatus(document.status()); e.setProviderReference(document.providerReference());
+    e.setSubmittedAt(document.submittedAt()); e.setRespondedAt(document.respondedAt());
+    e.setProviderResponseCode(document.providerResponseCode());
+    e.setProviderResponseMessage(document.providerResponseMessage());
     return e;
   }
 
@@ -76,6 +79,7 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
         e.getDocumentType(), e.getSeries(), e.getCorrelative(), e.getFullNumber(),
         e.getRecipientDocumentType(), e.getRecipientDocumentNumber(), e.getCurrency(), items,
         e.getSubtotal(), e.getDiscountTotal(), e.getTaxableTotal(), e.getTaxTotal(), e.getTotal(),
-        e.getProviderReference(), e.getIssuedAt());
+        e.getStatus(), e.getProviderReference(), e.getSubmittedAt(), e.getRespondedAt(),
+        e.getProviderResponseCode(), e.getProviderResponseMessage());
   }
 }

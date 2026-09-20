@@ -20,7 +20,10 @@ class MockBillingProviderTest {
     Instant now = Instant.parse("2026-09-01T12:00:00Z");
     MockBillingProvider provider = new MockBillingProvider(Clock.fixed(now, ZoneOffset.UTC));
     InvoiceDraft approved = InvoiceDraft.create(
-            "company-1", "customer-1", "PEN",
+            "company-1", "customer-1",
+            com.invoiceautomationservice.domain.model.InvoiceDocumentType.SALES_RECEIPT,
+            com.invoiceautomationservice.domain.model.IdentityDocumentType.DNI,
+            "12345678", "PEN",
             List.of(InvoiceItem.create("Consulting", BigDecimal.ONE, BigDecimal.TEN)),
             Instant.parse("2026-09-01T10:00:00Z")
     ).approve(Instant.parse("2026-09-01T11:00:00Z"));

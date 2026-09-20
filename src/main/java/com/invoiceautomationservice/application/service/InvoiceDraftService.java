@@ -2,6 +2,8 @@ package com.invoiceautomationservice.application.service;
 
 import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.COMPANY_INACTIVE;
 import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.CUSTOMER_INACTIVE;
+import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.ISSUER_ONBOARDING_REQUIRED;
+import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.INVOICE_REQUIRES_RUC;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
@@ -9,6 +11,7 @@ import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
+import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
@@ -16,6 +19,8 @@ import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.IdentityDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -31,10 +36,11 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final CompanyRepository companyRepository;
-  private final CustomerRepository customerRepository;
   private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
   private final CompanyAccessService companyAccessService;
+  private final IssuerTaxProfileRepository issuerTaxProfileRepository;
+  private final RecipientResolutionService recipientResolutionService;
   private final Clock clock;
 
   @Override
@@ -45,16 +51,26 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     if (!company.isActive()) {
       throw new ApplicationException(COMPANY_INACTIVE, request.companyId());
     }
-    Customer customer = customerRepository.findByIdAndCompanyId(request.customerId(), request.companyId());
+    if (!issuerTaxProfileRepository.existsByCompanyId(request.companyId())) {
+      throw new ApplicationException(ISSUER_ONBOARDING_REQUIRED, request.companyId());
+    }
+    if (request.documentType() == InvoiceDocumentType.INVOICE
+        && request.recipientDocumentType() != IdentityDocumentType.RUC) {
+      throw new ApplicationException(INVOICE_REQUIRES_RUC);
+    }
+    Customer customer = recipientResolutionService.resolve(
+        request.companyId(), request.recipientDocumentType(), request.recipientDocumentNumber());
     if (!customer.isActive()) {
-      throw new ApplicationException(CUSTOMER_INACTIVE, request.customerId());
+      throw new ApplicationException(CUSTOMER_INACTIVE, customer.getId());
     }
 
     List<InvoiceItem> items = request.items().stream()
             .map(item -> InvoiceItem.create(item.description(), item.quantity(), item.unitPrice()))
             .toList();
     InvoiceDraft draft = InvoiceDraft.create(
-            request.companyId(), request.customerId(), request.currency(), items, Instant.now(clock)
+            request.companyId(), customer.getId(), request.documentType(),
+            request.recipientDocumentType(), request.recipientDocumentNumber(),
+            request.currency(), items, Instant.now(clock)
     );
     return responseMapper.toResponse(invoiceDraftRepository.save(draft));
   }

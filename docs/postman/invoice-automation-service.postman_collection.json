@@ -153,6 +153,55 @@
           }
         },
         {
+          "name": "Configure issuer tax profile",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"taxpayerType\": \"LEGAL_ENTITY\",\n  \"fiscalAddress\": \"Av. Lima 123\",\n  \"ubigeo\": \"150101\",\n  \"department\": \"Lima\",\n  \"province\": \"Lima\",\n  \"district\": \"Lima\",\n  \"countryCode\": \"PE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/tax-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "tax-profile"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Issuer onboarding completed', () => pm.expect(pm.response.json().data.completed).to.eql(true));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get issuer tax profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/tax-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "tax-profile"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Tax profile belongs to company', () => pm.expect(pm.response.json().data.companyId).to.eql(pm.environment.get('companyId')));"
+              ]
+            }
+          }]
+        },
+        {
           "name": "Find company by ID",
           "request": {
             "method": "GET",
@@ -292,6 +341,52 @@
       ]
     },
     {
+      "name": "Recipients",
+      "item": [
+        {
+          "name": "Resolve recipient by DNI",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set('recipientDocumentNumber', Date.now().toString().slice(-8));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "const recipient = pm.response.json().data;",
+                  "pm.test('Recipient is resolved', () => pm.expect(recipient.documentNumber).to.eql(pm.environment.get('recipientDocumentNumber')));",
+                  "pm.environment.set('customerId', recipient.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"DNI\",\n  \"documentNumber\": \"{{recipientDocumentNumber}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recipients/resolve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "recipients", "resolve"]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Invoice Drafts",
       "item": [
         {
@@ -301,7 +396,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\n      \"description\": \"Servicio de consultoría\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 150.25\n    },\n    {\n      \"description\": \"Soporte\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.00\n    }\n  ]\n}",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"documentType\": \"SALES_RECEIPT\",\n  \"recipientDocumentType\": \"DNI\",\n  \"recipientDocumentNumber\": \"{{recipientDocumentNumber}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\n      \"description\": \"Servicio de consultoría\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 150.25\n    },\n    {\n      \"description\": \"Soporte\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.00\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -319,6 +414,7 @@
                 "const draft = pm.response.json().data;",
                 "pm.test('Draft has calculated totals', () => {",
                 "  pm.expect(draft.status).to.eql('DRAFT');",
+                "  pm.expect(draft.documentType).to.eql('SALES_RECEIPT');",
                 "  pm.expect(Number(draft.total)).to.eql(425.625);",
                 "});",
                 "pm.environment.set('invoiceDraftId', draft.id);"

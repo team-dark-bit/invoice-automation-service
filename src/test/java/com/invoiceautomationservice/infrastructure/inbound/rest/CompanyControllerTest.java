@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.invoiceautomationservice.application.dto.request.CreateCompanyRequest;
 import com.invoiceautomationservice.application.dto.response.CompanyResponse;
 import com.invoiceautomationservice.application.port.in.CompanyUseCase;
+import com.invoiceautomationservice.application.port.in.IssuerOnboardingUseCase;
 import com.invoiceautomationservice.infrastructure.adapter.in.web.CompanyController;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,9 @@ class CompanyControllerTest {
 
   @MockitoBean
   CompanyUseCase useCase;
+
+  @MockitoBean
+  IssuerOnboardingUseCase issuerOnboardingUseCase;
 
   @Test
   void createsCompany() throws Exception {

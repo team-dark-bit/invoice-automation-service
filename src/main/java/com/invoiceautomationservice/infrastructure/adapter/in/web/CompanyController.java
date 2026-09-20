@@ -2,7 +2,10 @@ package com.invoiceautomationservice.infrastructure.adapter.in.web;
 
 import com.invoiceautomationservice.application.dto.request.CreateCompanyRequest;
 import com.invoiceautomationservice.application.dto.response.CompanyResponse;
+import com.invoiceautomationservice.application.dto.request.ConfigureIssuerTaxProfileRequest;
+import com.invoiceautomationservice.application.dto.response.IssuerTaxProfileResponse;
 import com.invoiceautomationservice.application.port.in.CompanyUseCase;
+import com.invoiceautomationservice.application.port.in.IssuerOnboardingUseCase;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CompanyController {
 
   private final CompanyUseCase companyUseCase;
+  private final IssuerOnboardingUseCase issuerOnboardingUseCase;
 
   @PostMapping
   public ResponseEntity<ApiResponse<CompanyResponse>> create(
@@ -45,5 +49,22 @@ public class CompanyController {
   public ResponseEntity<ApiResponse<List<CompanyResponse>>> findAll() {
     List<CompanyResponse> companies = companyUseCase.findAll();
     return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Companies found", companies));
+  }
+
+  @PostMapping("/{id}/tax-profile")
+  public ResponseEntity<ApiResponse<IssuerTaxProfileResponse>> configureTaxProfile(
+      @PathVariable String id,
+      @RequestBody @Valid ConfigureIssuerTaxProfileRequest request) {
+    IssuerTaxProfileResponse profile = issuerOnboardingUseCase.configure(id, request);
+    return ResponseEntity.ok(ApiResponse.success(
+        HttpStatus.OK.value(), "Issuer tax profile configured", profile));
+  }
+
+  @GetMapping("/{id}/tax-profile")
+  public ResponseEntity<ApiResponse<IssuerTaxProfileResponse>> findTaxProfile(
+      @PathVariable String id) {
+    IssuerTaxProfileResponse profile = issuerOnboardingUseCase.findByCompanyId(id);
+    return ResponseEntity.ok(ApiResponse.success(
+        HttpStatus.OK.value(), "Issuer tax profile found", profile));
   }
 }

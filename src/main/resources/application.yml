@@ -16,3 +16,5 @@ management:
         include: health,info
 billing:
   provider: ${BILLING_PROVIDER:mock}
+recipient:
+  lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}

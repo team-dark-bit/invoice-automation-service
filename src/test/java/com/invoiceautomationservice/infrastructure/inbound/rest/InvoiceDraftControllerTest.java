@@ -102,7 +102,9 @@ class InvoiceDraftControllerTest {
     mockMvc.perform(post("/api/v1/invoice-drafts")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""
-                            {"companyId":"company-1","customerId":"customer-1","currency":"PEN","items":[]}
+                            {"companyId":"company-1","documentType":"SALES_RECEIPT",
+                             "recipientDocumentType":"DNI","recipientDocumentNumber":"12345678",
+                             "currency":"PEN","items":[]}
                             """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("Validation failed"))
@@ -114,7 +116,9 @@ class InvoiceDraftControllerTest {
     mockMvc.perform(post("/api/v1/invoice-drafts")
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""
-                            {"companyId":"company-1","customerId":"customer-1","currency":"pen",
+                            {"companyId":"company-1","documentType":"SALES_RECEIPT",
+                             "recipientDocumentType":"DNI","recipientDocumentNumber":"12345678",
+                             "currency":"pen",
                              "items":[{"description":" ","quantity":0,"unitPrice":-1}]}
                             """))
             .andExpect(status().isBadRequest())
@@ -124,7 +128,8 @@ class InvoiceDraftControllerTest {
 
   private String validRequest() {
     return """
-            {"companyId":"company-1","customerId":"customer-1","currency":"PEN",
+            {"companyId":"company-1","documentType":"SALES_RECEIPT",
+             "recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN",
              "items":[{"description":"Consulting","quantity":2,"unitPrice":150.25}]}
             """;
   }
@@ -136,7 +141,10 @@ class InvoiceDraftControllerTest {
     );
     Instant now = Instant.parse("2026-09-01T10:00:00Z");
     return new InvoiceDraftResponse(
-            DRAFT_ID, "company-1", "customer-1", "PEN", InvoiceDraftStatus.DRAFT,
+            DRAFT_ID, "company-1", "customer-1",
+            com.invoiceautomationservice.domain.model.InvoiceDocumentType.SALES_RECEIPT,
+            com.invoiceautomationservice.domain.model.IdentityDocumentType.DNI,
+            "12345678", "PEN", InvoiceDraftStatus.DRAFT,
             List.of(item), new BigDecimal("300.50"), new BigDecimal("300.50"), now, now, null, null
     );
   }
@@ -146,7 +154,8 @@ class InvoiceDraftControllerTest {
   ) {
     InvoiceDraftResponse base = response();
     return new InvoiceDraftResponse(
-            base.id(), base.companyId(), base.customerId(), base.currency(), status, base.items(),
+            base.id(), base.companyId(), base.customerId(), base.documentType(),
+            base.recipientDocumentType(), base.recipientDocumentNumber(), base.currency(), status, base.items(),
             base.subtotal(), base.total(), base.createdAt(), base.updatedAt(), providerReference, issuedAt
     );
   }

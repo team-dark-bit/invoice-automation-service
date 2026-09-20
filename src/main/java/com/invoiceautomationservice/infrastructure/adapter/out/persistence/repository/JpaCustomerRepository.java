@@ -8,5 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface JpaCustomerRepository extends JpaRepository<CustomerEntity, String> {
     Optional<CustomerEntity> findByIdAndCompanyId(String id, String companyId);
     List<CustomerEntity> findAllByCompanyIdAndActiveTrue(String companyId);
+    Optional<CustomerEntity> findByCompanyIdAndDocumentTypeAndDocumentNumber(
+        String companyId, String documentType, String documentNumber);
 }
 

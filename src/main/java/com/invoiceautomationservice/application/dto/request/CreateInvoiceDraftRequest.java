@@ -5,12 +5,19 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
+import com.invoiceautomationservice.domain.model.IdentityDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import jakarta.validation.constraints.NotNull;
 
 public record CreateInvoiceDraftRequest(
         @NotBlank(message = "The field companyId must not be null or empty")
         String companyId,
-        @NotBlank(message = "The field customerId must not be null or empty")
-        String customerId,
+        @NotNull(message = "The field documentType must not be null")
+        InvoiceDocumentType documentType,
+        @NotNull(message = "The field recipientDocumentType must not be null")
+        IdentityDocumentType recipientDocumentType,
+        @NotBlank(message = "The field recipientDocumentNumber must not be null or empty")
+        String recipientDocumentNumber,
         @NotBlank(message = "The field currency must not be null or empty")
         @Pattern(regexp = "[A-Z]{3}", message = "The field currency must be a three-letter ISO code")
         String currency,

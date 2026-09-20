@@ -19,8 +19,9 @@ public class CustomerPersistenceAdapter implements CustomerRepository {
   private final CustomerDaoDomainMapper customerDaoDomainMapper;
 
   @Override
-  public void save(Customer customer) {
-    jpaCustomerRepository.save(customerDaoDomainMapper.toDao(customer));
+  public Customer save(Customer customer) {
+    return customerDaoDomainMapper.toDomain(
+        jpaCustomerRepository.save(customerDaoDomainMapper.toDao(customer)));
   }
 
   @Override
@@ -36,6 +37,15 @@ public class CustomerPersistenceAdapter implements CustomerRepository {
             .stream()
             .map(customerDaoDomainMapper::toDomain)
             .toList();
+  }
+
+  @Override
+  public java.util.Optional<Customer> findByCompanyIdAndDocumentTypeAndDocumentNumber(
+      String companyId, String documentType, String documentNumber) {
+    return jpaCustomerRepository
+        .findByCompanyIdAndDocumentTypeAndDocumentNumber(
+            companyId, documentType, documentNumber)
+        .map(customerDaoDomainMapper::toDomain);
   }
 }
 

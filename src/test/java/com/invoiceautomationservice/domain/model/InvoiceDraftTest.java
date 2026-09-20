@@ -18,7 +18,9 @@ class InvoiceDraftTest {
     ));
 
     InvoiceDraft draft = InvoiceDraft.create(
-            "company-1", "customer-1", "PEN", items, Instant.parse("2026-09-01T10:00:00Z")
+            "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+            IdentityDocumentType.DNI, "12345678", "PEN", items,
+            Instant.parse("2026-09-01T10:00:00Z")
     );
     items.clear();
 
@@ -31,7 +33,8 @@ class InvoiceDraftTest {
   @Test
   void rejectsDraftWithoutItems() {
     assertThatThrownBy(() -> InvoiceDraft.create(
-            "company-1", "customer-1", "PEN", List.of(), Instant.now()
+            "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+            IdentityDocumentType.DNI, "12345678", "PEN", List.of(), Instant.now()
     )).isInstanceOf(IllegalArgumentException.class)
             .hasMessage("invoice draft must contain at least one item");
   }
@@ -39,10 +42,21 @@ class InvoiceDraftTest {
   @Test
   void rejectsInvalidCurrency() {
     assertThatThrownBy(() -> InvoiceDraft.create(
-            "company-1", "customer-1", "pen",
+            "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+            IdentityDocumentType.DNI, "12345678", "pen",
             List.of(InvoiceItem.create("Consulting", BigDecimal.ONE, BigDecimal.TEN)), Instant.now()
     )).isInstanceOf(IllegalArgumentException.class)
             .hasMessage("currency must be a three-letter ISO code");
+  }
+
+  @Test
+  void requiresRucForInvoice() {
+    assertThatThrownBy(() -> InvoiceDraft.create(
+        "company-1", "customer-1", InvoiceDocumentType.INVOICE,
+        IdentityDocumentType.DNI, "12345678", "PEN",
+        List.of(InvoiceItem.create("Consulting", BigDecimal.ONE, BigDecimal.TEN)), Instant.now()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("invoice recipient must be identified with RUC");
   }
 
   @Test
@@ -86,7 +100,8 @@ class InvoiceDraftTest {
 
   private InvoiceDraft validDraft(Instant createdAt) {
     return InvoiceDraft.create(
-            "company-1", "customer-1", "PEN",
+            "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+            IdentityDocumentType.DNI, "12345678", "PEN",
             List.of(InvoiceItem.create("Consulting", BigDecimal.ONE, BigDecimal.TEN)), createdAt
     );
   }

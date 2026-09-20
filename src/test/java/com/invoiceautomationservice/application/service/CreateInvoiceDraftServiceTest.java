@@ -14,7 +14,7 @@ import com.invoiceautomationservice.application.dto.response.InvoiceDraftRespons
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
-import com.invoiceautomationservice.application.port.out.CustomerRepository;
+import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
@@ -22,6 +22,8 @@ import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.IdentityDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -36,7 +38,8 @@ class CreateInvoiceDraftServiceTest {
 
   private InvoiceDraftRepository draftRepository;
   private CompanyRepository companyRepository;
-  private CustomerRepository customerRepository;
+  private IssuerTaxProfileRepository issuerTaxProfileRepository;
+  private RecipientResolutionService recipientResolutionService;
   private InvoiceDraftDomainResponseMapper mapper;
   private BillingProvider billingProvider;
   private InvoiceDraftService service;
@@ -46,14 +49,15 @@ class CreateInvoiceDraftServiceTest {
   void setUp() {
     draftRepository = mock(InvoiceDraftRepository.class);
     companyRepository = mock(CompanyRepository.class);
-    customerRepository = mock(CustomerRepository.class);
+    issuerTaxProfileRepository = mock(IssuerTaxProfileRepository.class);
+    recipientResolutionService = mock(RecipientResolutionService.class);
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
     billingProvider = mock(BillingProvider.class);
     accessService = mock(CompanyAccessService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     service = new InvoiceDraftService(
-            draftRepository, companyRepository, customerRepository, billingProvider, mapper,
-            accessService, clock
+            draftRepository, companyRepository, billingProvider, mapper, accessService,
+            issuerTaxProfileRepository, recipientResolutionService, clock
     );
   }
 
@@ -61,7 +65,8 @@ class CreateInvoiceDraftServiceTest {
   void createsCompleteDraftAndCalculatesTotals() {
     CreateInvoiceDraftRequest request = request();
     when(companyRepository.findById("company-1")).thenReturn(company(true));
-    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
+    when(issuerTaxProfileRepository.existsByCompanyId("company-1")).thenReturn(true);
+    when(recipientResolutionService.resolve("company-1", IdentityDocumentType.DNI, "12345678"))
             .thenReturn(customer(true));
     when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
     when(mapper.toResponse(any(InvoiceDraft.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
@@ -71,6 +76,7 @@ class CreateInvoiceDraftServiceTest {
     assertThat(result.id()).isNotNull();
     assertThat(result.companyId()).isEqualTo("company-1");
     assertThat(result.customerId()).isEqualTo("customer-1");
+    assertThat(result.documentType()).isEqualTo(InvoiceDocumentType.SALES_RECEIPT);
     assertThat(result.currency()).isEqualTo("PEN");
     assertThat(result.items()).hasSize(2);
     assertThat(result.subtotal()).isEqualByComparingTo("350.50");
@@ -92,7 +98,8 @@ class CreateInvoiceDraftServiceTest {
   @Test
   void rejectsInactiveCustomer() {
     when(companyRepository.findById("company-1")).thenReturn(company(true));
-    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
+    when(issuerTaxProfileRepository.existsByCompanyId("company-1")).thenReturn(true);
+    when(recipientResolutionService.resolve("company-1", IdentityDocumentType.DNI, "12345678"))
             .thenReturn(customer(false));
 
     assertThatThrownBy(() -> service.create(request()))
@@ -154,14 +161,18 @@ class CreateInvoiceDraftServiceTest {
   }
 
   private CreateInvoiceDraftRequest request() {
-    return new CreateInvoiceDraftRequest("company-1", "customer-1", "PEN", List.of(
+    return new CreateInvoiceDraftRequest(
+        "company-1", InvoiceDocumentType.SALES_RECEIPT, IdentityDocumentType.DNI,
+        "12345678", "PEN", List.of(
             new CreateInvoiceItemRequest("Consulting", new BigDecimal("2"), new BigDecimal("150.25")),
             new CreateInvoiceItemRequest("Support", BigDecimal.ONE, new BigDecimal("50.00"))
     ));
   }
 
   private InvoiceDraft draft() {
-    return InvoiceDraft.create("company-1", "customer-1", "PEN", List.of(
+    return InvoiceDraft.create(
+        "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+        IdentityDocumentType.DNI, "12345678", "PEN", List.of(
             InvoiceItem.create("Consulting", new BigDecimal("2"), new BigDecimal("150.25")),
             InvoiceItem.create("Support", BigDecimal.ONE, new BigDecimal("50.00"))
     ), Instant.parse("2026-09-01T10:00:00Z"));
@@ -177,6 +188,7 @@ class CreateInvoiceDraftServiceTest {
   private Customer customer(boolean active) {
     Customer customer = new Customer();
     customer.setId("customer-1");
+    customer.setCompanyId("company-1");
     customer.setActive(active);
     return customer;
   }
@@ -186,7 +198,9 @@ class CreateInvoiceDraftServiceTest {
             item.id(), item.description(), item.quantity(), item.unitPrice(), item.lineTotal()
     )).toList();
     return new InvoiceDraftResponse(
-            draft.id(), draft.companyId(), draft.customerId(), draft.currency(), draft.status(),
+            draft.id(), draft.companyId(), draft.customerId(), draft.documentType(),
+            draft.recipientDocumentType(), draft.recipientDocumentNumber(),
+            draft.currency(), draft.status(),
             items, draft.subtotal(), draft.total(), draft.createdAt(), draft.updatedAt(),
             draft.providerReference(), draft.issuedAt()
     );

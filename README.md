@@ -42,7 +42,7 @@ Crear un borrador completo:
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/invoice-drafts \
   -H "Content-Type: application/json" \
-  -d '{"companyId":"company-id","customerId":"customer-id","currency":"PEN","items":[{"description":"Servicio de consultoría","quantity":2,"unitPrice":150.00}]}'
+  -d '{"companyId":"company-id","documentType":"SALES_RECEIPT","recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN","items":[{"description":"Servicio de consultoría","quantity":2,"unitPrice":150.00}]}'
 ```
 
 Crear una empresa:
@@ -88,12 +88,14 @@ Importe ambos archivos en Postman, seleccione el environment `Invoice Automation
 2. Inicia sesión con el usuario local creado por Flyway V7 y guarda el JWT.
 3. Consulta los datos del usuario autenticado.
 4. Crea una empresa y guarda su ID.
-5. Consulta y lista empresas.
-6. Crea un cliente, lo localiza por su documento y guarda su ID.
-7. Crea un borrador con dos ítems y guarda su ID.
-8. Recupera el borrador persistido y valida sus ítems y totales.
-9. Aprueba el borrador y comprueba su cambio de estado.
-10. Emite el borrador con el proveedor mock y valida la referencia generada.
+5. Configura y consulta el perfil tributario del emisor.
+6. Consulta y lista empresas.
+7. Conserva los endpoints administrativos de clientes.
+8. Resuelve automáticamente un receptor por DNI y guarda su ID interno.
+9. Crea una boleta borrador con dos ítems, sin enviar `customerId`.
+10. Recupera el borrador persistido y valida sus ítems y totales.
+11. Aprueba el borrador y comprueba su cambio de estado.
+12. Emite el borrador con el proveedor mock y valida la referencia generada.
 
 Las credenciales locales iniciales son `haroldqc` / `password`. Son exclusivamente para desarrollo y pueden sobrescribirse en el environment de Postman. Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones.
 
@@ -108,6 +110,16 @@ X-Company-Id: <companyId>
 ```
 
 La colección Postman configura este header automáticamente con la empresa creada durante el flujo. Los borradores siguen recibiendo `companyId`, pero el backend valida que la empresa y el cliente pertenezcan al usuario autenticado y al mismo tenant.
+
+## Preparación tributaria previa al proveedor real
+
+Antes de integrar el proveedor real se incorporaron tres capacidades:
+
+- **Onboarding del emisor:** `POST /api/v1/companies/{id}/tax-profile` registra tipo de contribuyente, domicilio fiscal, ubigeo y ubicación. Un borrador no puede crearse hasta completar este perfil.
+- **Resolución del receptor:** `POST /api/v1/recipients/resolve` busca por empresa, tipo y número de documento. Si no existe, usa `RecipientLookupProvider` y lo persiste internamente. El adaptador predeterminado es `mock`; se cambia mediante `RECIPIENT_LOOKUP_PROVIDER`.
+- **Tipo de comprobante:** `INVOICE` representa factura/código SUNAT `01` y exige receptor con RUC. `SALES_RECEIPT` representa boleta/código SUNAT `03` y admite DNI o RUC.
+
+El alta manual de un cliente ya no es necesaria para crear un borrador. El request recibe `recipientDocumentType` y `recipientDocumentNumber`; el backend crea o reutiliza el `Customer` interno y conserva su identificador para integridad e historial.
 
 ## Alcance de Release 1
 

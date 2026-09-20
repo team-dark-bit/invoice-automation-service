@@ -88,7 +88,10 @@ class InvoiceDraftPersistenceAdapterTest {
     InvoiceItem item = InvoiceItem.create("Consulting", new BigDecimal("2"), new BigDecimal("150.25"));
     return new InvoiceDraft(
             UUID.fromString("4d773aa2-8ea7-4c26-935d-f47086d7c385"),
-            "company-1", "customer-1", "PEN", InvoiceDraftStatus.DRAFT, List.of(item),
+            "company-1", "customer-1",
+            com.invoiceautomationservice.domain.model.InvoiceDocumentType.SALES_RECEIPT,
+            com.invoiceautomationservice.domain.model.IdentityDocumentType.DNI,
+            "12345678", "PEN", InvoiceDraftStatus.DRAFT, List.of(item),
             new BigDecimal("300.50"), new BigDecimal("300.50"), now, now, null, null
     );
   }
@@ -98,6 +101,9 @@ class InvoiceDraftPersistenceAdapterTest {
     dao.setId(draft.id());
     dao.setCompanyId(draft.companyId());
     dao.setCustomerId(draft.customerId());
+    dao.setDocumentType(draft.documentType());
+    dao.setRecipientDocumentType(draft.recipientDocumentType());
+    dao.setRecipientDocumentNumber(draft.recipientDocumentNumber());
     dao.setCurrency(draft.currency());
     dao.setStatus(draft.status());
     dao.setSubtotal(draft.subtotal());

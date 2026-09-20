@@ -1,6 +1,8 @@
 package com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity;
 
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
+import com.invoiceautomationservice.domain.model.IdentityDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,6 +26,14 @@ public class InvoiceDraftEntity {
   private String companyId;
   @Column(name = "customer_id", nullable = false, length = 36)
   private String customerId;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "document_type", nullable = false)
+  private InvoiceDocumentType documentType;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "recipient_document_type", nullable = false)
+  private IdentityDocumentType recipientDocumentType;
+  @Column(name = "recipient_document_number", nullable = false, length = 32)
+  private String recipientDocumentNumber;
   @Column(nullable = false, length = 3)
   private String currency;
   @Enumerated(EnumType.STRING)

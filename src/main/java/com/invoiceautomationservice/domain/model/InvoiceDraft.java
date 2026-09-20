@@ -11,6 +11,9 @@ public record InvoiceDraft(
         UUID id,
         String companyId,
         String customerId,
+        InvoiceDocumentType documentType,
+        IdentityDocumentType recipientDocumentType,
+        String recipientDocumentNumber,
         String currency,
         InvoiceDraftStatus status,
         List<InvoiceItem> items,
@@ -26,6 +29,9 @@ public record InvoiceDraft(
     Objects.requireNonNull(id, "id is required");
     Objects.requireNonNull(companyId, "companyId is required");
     Objects.requireNonNull(customerId, "customerId is required");
+    Objects.requireNonNull(documentType, "documentType is required");
+    Objects.requireNonNull(recipientDocumentType, "recipientDocumentType is required");
+    Objects.requireNonNull(recipientDocumentNumber, "recipientDocumentNumber is required");
     Objects.requireNonNull(currency, "currency is required");
     Objects.requireNonNull(status, "status is required");
     Objects.requireNonNull(items, "items are required");
@@ -40,6 +46,10 @@ public record InvoiceDraft(
     if (items.isEmpty()) {
       throw new IllegalArgumentException("invoice draft must contain at least one item");
     }
+    if (documentType == InvoiceDocumentType.INVOICE
+        && recipientDocumentType != IdentityDocumentType.RUC) {
+      throw new IllegalArgumentException("invoice recipient must be identified with RUC");
+    }
     if (status == InvoiceDraftStatus.ISSUED && (providerReference == null || issuedAt == null)) {
       throw new IllegalArgumentException("issued draft requires provider reference and issue date");
     }
@@ -48,6 +58,9 @@ public record InvoiceDraft(
   public static InvoiceDraft create(
           String companyId,
           String customerId,
+          InvoiceDocumentType documentType,
+          IdentityDocumentType recipientDocumentType,
+          String recipientDocumentNumber,
           String currency,
           List<InvoiceItem> items,
           Instant createdAt
@@ -56,7 +69,8 @@ public record InvoiceDraft(
             .map(InvoiceItem::lineTotal)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     return new InvoiceDraft(
-            UUID.randomUUID(), companyId, customerId, currency, InvoiceDraftStatus.DRAFT,
+            UUID.randomUUID(), companyId, customerId, documentType, recipientDocumentType,
+            recipientDocumentNumber, currency, InvoiceDraftStatus.DRAFT,
             items, subtotal, subtotal, createdAt, createdAt, null, null
     );
   }
@@ -89,7 +103,8 @@ public record InvoiceDraft(
           Instant newIssuedAt
   ) {
     return new InvoiceDraft(
-            id, companyId, customerId, currency, newStatus, items, subtotal, total,
+            id, companyId, customerId, documentType, recipientDocumentType,
+            recipientDocumentNumber, currency, newStatus, items, subtotal, total,
             createdAt, newUpdatedAt, newProviderReference, newIssuedAt
     );
   }

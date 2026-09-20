@@ -19,10 +19,23 @@ public record InvoiceDraftResponse(
         InvoiceDraftStatus status,
         List<InvoiceItemResponse> items,
         BigDecimal subtotal,
+        BigDecimal discountTotal,
+        BigDecimal taxableTotal,
+        BigDecimal taxTotal,
         BigDecimal total,
         Instant createdAt,
         Instant updatedAt,
         String providerReference,
         Instant issuedAt
 ) {
+  public InvoiceDraftResponse(
+      UUID id, String companyId, String customerId, InvoiceDocumentType documentType,
+      IdentityDocumentType recipientDocumentType, String recipientDocumentNumber,
+      String currency, InvoiceDraftStatus status, List<InvoiceItemResponse> items,
+      BigDecimal subtotal, BigDecimal total, Instant createdAt, Instant updatedAt,
+      String providerReference, Instant issuedAt) {
+    this(id, companyId, customerId, documentType, recipientDocumentType,
+        recipientDocumentNumber, currency, status, items, subtotal, BigDecimal.ZERO,
+        BigDecimal.ZERO, BigDecimal.ZERO, total, createdAt, updatedAt, providerReference, issuedAt);
+  }
 }

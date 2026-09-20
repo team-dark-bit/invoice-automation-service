@@ -6,6 +6,9 @@ import com.invoiceautomationservice.application.dto.request.ConfigureIssuerTaxPr
 import com.invoiceautomationservice.application.dto.response.IssuerTaxProfileResponse;
 import com.invoiceautomationservice.application.port.in.CompanyUseCase;
 import com.invoiceautomationservice.application.port.in.IssuerOnboardingUseCase;
+import com.invoiceautomationservice.application.dto.request.ConfigureDocumentSeriesRequest;
+import com.invoiceautomationservice.application.dto.response.DocumentSeriesResponse;
+import com.invoiceautomationservice.application.service.DocumentSeriesService;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -28,6 +31,7 @@ public class CompanyController {
 
   private final CompanyUseCase companyUseCase;
   private final IssuerOnboardingUseCase issuerOnboardingUseCase;
+  private final DocumentSeriesService documentSeriesService;
 
   @PostMapping
   public ResponseEntity<ApiResponse<CompanyResponse>> create(
@@ -66,5 +70,22 @@ public class CompanyController {
     IssuerTaxProfileResponse profile = issuerOnboardingUseCase.findByCompanyId(id);
     return ResponseEntity.ok(ApiResponse.success(
         HttpStatus.OK.value(), "Issuer tax profile found", profile));
+  }
+
+  @PostMapping("/{id}/document-series")
+  public ResponseEntity<ApiResponse<DocumentSeriesResponse>> configureDocumentSeries(
+      @PathVariable String id,
+      @RequestBody @Valid ConfigureDocumentSeriesRequest request) {
+    DocumentSeriesResponse series = documentSeriesService.configure(id, request);
+    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+        HttpStatus.CREATED.value(), "Document series configured", series));
+  }
+
+  @GetMapping("/{id}/document-series")
+  public ResponseEntity<ApiResponse<List<DocumentSeriesResponse>>> findDocumentSeries(
+      @PathVariable String id) {
+    List<DocumentSeriesResponse> series = documentSeriesService.findAll(id);
+    return ResponseEntity.ok(ApiResponse.success(
+        HttpStatus.OK.value(), "Document series found", series));
   }
 }

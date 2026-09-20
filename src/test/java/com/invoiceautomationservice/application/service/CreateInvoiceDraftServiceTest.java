@@ -12,6 +12,9 @@ import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRe
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
+import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
+import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
+import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
@@ -24,6 +27,8 @@ import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.DocumentNumber;
+import com.invoiceautomationservice.domain.model.ElectronicDocument;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -44,6 +49,9 @@ class CreateInvoiceDraftServiceTest {
   private BillingProvider billingProvider;
   private InvoiceDraftService service;
   private CompanyAccessService accessService;
+  private DocumentSeriesRepository documentSeriesRepository;
+  private ElectronicDocumentRepository electronicDocumentRepository;
+  private ElectronicDocumentService electronicDocumentService;
 
   @BeforeEach
   void setUp() {
@@ -54,10 +62,14 @@ class CreateInvoiceDraftServiceTest {
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
     billingProvider = mock(BillingProvider.class);
     accessService = mock(CompanyAccessService.class);
+    documentSeriesRepository = mock(DocumentSeriesRepository.class);
+    electronicDocumentRepository = mock(ElectronicDocumentRepository.class);
+    electronicDocumentService = mock(ElectronicDocumentService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     service = new InvoiceDraftService(
             draftRepository, companyRepository, billingProvider, mapper, accessService,
-            issuerTaxProfileRepository, recipientResolutionService, clock
+            issuerTaxProfileRepository, recipientResolutionService, documentSeriesRepository,
+            electronicDocumentRepository, electronicDocumentService, clock
     );
   }
 
@@ -138,16 +150,20 @@ class CreateInvoiceDraftServiceTest {
             "MOCK-" + approved.id(), Instant.parse("2026-09-01T10:00:00Z")
     );
     when(draftRepository.findById(approved.id())).thenReturn(approved);
-    when(billingProvider.issue(approved)).thenReturn(billingResult);
+    when(documentSeriesRepository.reserveNext("company-1", InvoiceDocumentType.SALES_RECEIPT))
+            .thenReturn(new DocumentNumber("B001", 1));
+    when(billingProvider.issue(any(ElectronicDocument.class))).thenReturn(billingResult);
+    when(electronicDocumentRepository.save(any(ElectronicDocument.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
     when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
-    when(mapper.toResponse(any(InvoiceDraft.class))).thenAnswer(invocation -> response(invocation.getArgument(0)));
+    ElectronicDocumentResponse documentResponse = mock(ElectronicDocumentResponse.class);
+    when(electronicDocumentService.toResponse(any(ElectronicDocument.class))).thenReturn(documentResponse);
 
-    InvoiceDraftResponse result = service.issue(approved.id());
+    ElectronicDocumentResponse result = service.issue(approved.id());
 
-    assertThat(result.status()).isEqualTo(com.invoiceautomationservice.domain.model.InvoiceDraftStatus.ISSUED);
-    assertThat(result.providerReference()).isEqualTo("MOCK-" + approved.id());
-    assertThat(result.issuedAt()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
-    verify(billingProvider).issue(approved);
+    assertThat(result).isSameAs(documentResponse);
+    verify(billingProvider).issue(any(ElectronicDocument.class));
+    verify(electronicDocumentRepository).save(any(ElectronicDocument.class));
   }
 
   @Test

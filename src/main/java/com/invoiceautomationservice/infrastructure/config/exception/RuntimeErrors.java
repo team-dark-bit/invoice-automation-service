@@ -24,7 +24,13 @@ public enum RuntimeErrors implements ApplicationError {
     INVALID_RECIPIENT_DOCUMENT(BAD_REQUEST,
             "The %s recipient document must contain %s digits"),
     INVOICE_REQUIRES_RUC(BAD_REQUEST,
-            "An invoice recipient must be identified with RUC");
+            "An invoice recipient must be identified with RUC"),
+    INVALID_DOCUMENT_SERIES(BAD_REQUEST,
+            "The series %s is invalid for document type %s"),
+    DOCUMENT_SERIES_NOT_FOUND(NOT_FOUND,
+            "No active series exists for document type %s and company %s"),
+    ELECTRONIC_DOCUMENT_NOT_FOUND(NOT_FOUND,
+            "The electronic document with id: %s does not exist");
 
     private final HttpStatus status;
     private final String message;

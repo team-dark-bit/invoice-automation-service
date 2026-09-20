@@ -1,8 +1,8 @@
 package com.invoiceautomationservice.application.port.out;
 
 import com.invoiceautomationservice.domain.model.BillingResult;
-import com.invoiceautomationservice.domain.model.InvoiceDraft;
+import com.invoiceautomationservice.domain.model.ElectronicDocument;
 
 public interface BillingProvider {
-  BillingResult issue(InvoiceDraft invoiceDraft);
+  BillingResult issue(ElectronicDocument document);
 }

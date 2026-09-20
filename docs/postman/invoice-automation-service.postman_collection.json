@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
     "name": "Invoice Automation Service",
-    "description": "Colección versionada para probar autenticación, aislamiento multiempresa y los endpoints implementados hasta Release 8. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
+    "description": "Colección versionada para probar autenticación, aislamiento multiempresa, tributación de borradores, series y emisión de comprobantes. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -202,6 +202,52 @@
           }]
         },
         {
+          "name": "Configure sales receipt series",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"SALES_RECEIPT\",\n  \"series\": \"B001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/document-series",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "document-series"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                "pm.test('Receipt series starts at zero', () => pm.expect(pm.response.json().data.currentCorrelative).to.eql(0));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "List document series",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/document-series",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "document-series"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]
+            }
+          }]
+        },
+        {
           "name": "Find company by ID",
           "request": {
             "method": "GET",
@@ -396,7 +442,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"documentType\": \"SALES_RECEIPT\",\n  \"recipientDocumentType\": \"DNI\",\n  \"recipientDocumentNumber\": \"{{recipientDocumentNumber}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\n      \"description\": \"Servicio de consultoría\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 150.25\n    },\n    {\n      \"description\": \"Soporte\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.00\n    }\n  ]\n}",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"documentType\": \"SALES_RECEIPT\",\n  \"recipientDocumentType\": \"DNI\",\n  \"recipientDocumentNumber\": \"{{recipientDocumentNumber}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\n      \"description\": \"Servicio de consultoría\",\n      \"unitCode\": \"NIU\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 150.25,\n      \"discount\": 0,\n      \"taxAffectation\": \"TAXED\"\n    },\n    {\n      \"description\": \"Soporte\",\n      \"unitCode\": \"NIU\",\n      \"quantity\": 1,\n      \"unitPrice\": 50.00,\n      \"discount\": 0,\n      \"taxAffectation\": \"TAXED\"\n    }\n  ]\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -415,7 +461,9 @@
                 "pm.test('Draft has calculated totals', () => {",
                 "  pm.expect(draft.status).to.eql('DRAFT');",
                 "  pm.expect(draft.documentType).to.eql('SALES_RECEIPT');",
-                "  pm.expect(Number(draft.total)).to.eql(425.625);",
+                "  pm.expect(Number(draft.subtotal)).to.eql(425.63);",
+                "  pm.expect(Number(draft.taxTotal)).to.eql(76.61);",
+                "  pm.expect(Number(draft.total)).to.eql(502.24);",
                 "});",
                 "pm.environment.set('invoiceDraftId', draft.id);"
               ]
@@ -443,7 +491,7 @@
                 "pm.test('Returns persisted aggregate', () => {",
                 "  pm.expect(draft.id).to.eql(pm.environment.get('invoiceDraftId'));",
                 "  pm.expect(draft.items).to.have.length(2);",
-                "  pm.expect(Number(draft.total)).to.eql(425.625);",
+                "  pm.expect(Number(draft.total)).to.eql(502.24);",
                 "});"
               ]
             }
@@ -488,12 +536,35 @@
               "type": "text/javascript",
               "exec": [
                 "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
-                "const draft = pm.response.json().data;",
-                "pm.test('Draft is issued by mock provider', () => {",
-                "  pm.expect(draft.status).to.eql('ISSUED');",
-                "  pm.expect(draft.providerReference).to.eql(`MOCK-${pm.environment.get('invoiceDraftId')}`);",
-                "  pm.expect(draft.issuedAt).to.be.a('string').and.not.empty;",
+                "const document = pm.response.json().data;",
+                "pm.test('Electronic document is immutable and numbered', () => {",
+                "  pm.expect(document.fullNumber).to.match(/^B001-\\d{8}$/);",
+                "  pm.expect(document.providerReference).to.eql(`MOCK-${document.fullNumber}`);",
+                "  pm.expect(document.issuedAt).to.be.a('string').and.not.empty;",
                 "});"
+                ,"pm.environment.set('electronicDocumentId', document.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Find issued electronic document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "electronic-documents", "{{electronicDocumentId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns immutable document', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('electronicDocumentId')));"
               ]
             }
           }]

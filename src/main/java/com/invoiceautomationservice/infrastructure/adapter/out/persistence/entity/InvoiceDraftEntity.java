@@ -41,6 +41,12 @@ public class InvoiceDraftEntity {
   private InvoiceDraftStatus status;
   @Column(nullable = false, precision = 20, scale = 6)
   private BigDecimal subtotal;
+  @Column(name = "discount_total", nullable = false, precision = 20, scale = 2)
+  private BigDecimal discountTotal;
+  @Column(name = "taxable_total", nullable = false, precision = 20, scale = 2)
+  private BigDecimal taxableTotal;
+  @Column(name = "tax_total", nullable = false, precision = 20, scale = 2)
+  private BigDecimal taxTotal;
   @Column(nullable = false, precision = 20, scale = 6)
   private BigDecimal total;
   @Column(name = "created_at", nullable = false)

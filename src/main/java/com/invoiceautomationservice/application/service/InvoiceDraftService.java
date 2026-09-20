@@ -13,12 +13,16 @@ import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
+import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
+import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.ElectronicDocument;
+import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
@@ -41,6 +45,9 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   private final CompanyAccessService companyAccessService;
   private final IssuerTaxProfileRepository issuerTaxProfileRepository;
   private final RecipientResolutionService recipientResolutionService;
+  private final DocumentSeriesRepository documentSeriesRepository;
+  private final ElectronicDocumentRepository electronicDocumentRepository;
+  private final ElectronicDocumentService electronicDocumentService;
   private final Clock clock;
 
   @Override
@@ -65,7 +72,9 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     }
 
     List<InvoiceItem> items = request.items().stream()
-            .map(item -> InvoiceItem.create(item.description(), item.quantity(), item.unitPrice()))
+            .map(item -> InvoiceItem.create(
+                item.description(), item.unitCode(), item.quantity(), item.unitPrice(),
+                item.discount(), item.taxAffectation()))
             .toList();
     InvoiceDraft draft = InvoiceDraft.create(
             request.companyId(), customer.getId(), request.documentType(),
@@ -94,12 +103,18 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   @Override
   @Transactional
-  public InvoiceDraftResponse issue(UUID id) {
+  public ElectronicDocumentResponse issue(UUID id) {
     InvoiceDraft approved = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(approved.companyId());
     approved.ensureCanBeIssued();
-    BillingResult result = billingProvider.issue(approved);
+    var documentNumber = documentSeriesRepository.reserveNext(
+        approved.companyId(), approved.documentType());
+    ElectronicDocument provisional = ElectronicDocument.from(approved, documentNumber);
+    BillingResult result = billingProvider.issue(provisional);
+    ElectronicDocument issuedDocument = provisional.issued(result);
+    ElectronicDocument savedDocument = electronicDocumentRepository.save(issuedDocument);
     InvoiceDraft issued = approved.markIssued(result.reference(), result.issuedAt());
-    return responseMapper.toResponse(invoiceDraftRepository.save(issued));
+    invoiceDraftRepository.save(issued);
+    return electronicDocumentService.toResponse(savedDocument);
   }
 }

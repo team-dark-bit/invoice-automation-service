@@ -2,6 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.in.web;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
+import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -46,8 +47,9 @@ public class InvoiceDraftController {
   }
 
   @PostMapping("/{id}/issue")
-  public ResponseEntity<ApiResponse<InvoiceDraftResponse>> issue(@PathVariable UUID id) {
-    InvoiceDraftResponse draft = invoiceDraftUseCase.issue(id);
-    return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Invoice draft issued", draft));
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> issue(@PathVariable UUID id) {
+    ElectronicDocumentResponse document = invoiceDraftUseCase.issue(id);
+    return ResponseEntity.ok(ApiResponse.success(
+        HttpStatus.OK.value(), "Electronic document issued", document));
   }
 }

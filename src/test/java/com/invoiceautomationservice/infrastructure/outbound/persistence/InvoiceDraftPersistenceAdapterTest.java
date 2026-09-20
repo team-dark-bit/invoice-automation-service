@@ -107,6 +107,9 @@ class InvoiceDraftPersistenceAdapterTest {
     dao.setCurrency(draft.currency());
     dao.setStatus(draft.status());
     dao.setSubtotal(draft.subtotal());
+    dao.setDiscountTotal(draft.discountTotal());
+    dao.setTaxableTotal(draft.taxableTotal());
+    dao.setTaxTotal(draft.taxTotal());
     dao.setTotal(draft.total());
     dao.setCreatedAt(draft.createdAt());
     dao.setUpdatedAt(draft.updatedAt());

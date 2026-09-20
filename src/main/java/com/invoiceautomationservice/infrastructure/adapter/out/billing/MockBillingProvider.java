@@ -2,7 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.billing;
 
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.domain.model.BillingResult;
-import com.invoiceautomationservice.domain.model.InvoiceDraft;
+import com.invoiceautomationservice.domain.model.ElectronicDocument;
 import java.time.Clock;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ public class MockBillingProvider implements BillingProvider {
   private final Clock clock;
 
   @Override
-  public BillingResult issue(InvoiceDraft invoiceDraft) {
-    return new BillingResult("MOCK-" + invoiceDraft.id(), Instant.now(clock));
+  public BillingResult issue(ElectronicDocument document) {
+    return new BillingResult("MOCK-" + document.fullNumber(), Instant.now(clock));
   }
 }

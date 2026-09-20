@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
+import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException;
@@ -74,15 +75,13 @@ class InvoiceDraftControllerTest {
 
   @Test
   void issuesDraft() throws Exception {
-    when(useCase.issue(DRAFT_ID)).thenReturn(withStatus(
-            InvoiceDraftStatus.ISSUED, "MOCK-" + DRAFT_ID, Instant.parse("2026-09-01T11:00:00Z")
-    ));
+    when(useCase.issue(DRAFT_ID)).thenReturn(electronicDocument());
 
     mockMvc.perform(post("/api/v1/invoice-drafts/{id}/issue", DRAFT_ID))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.message").value("Invoice draft issued"))
-            .andExpect(jsonPath("$.data.status").value("ISSUED"))
-            .andExpect(jsonPath("$.data.providerReference").value("MOCK-" + DRAFT_ID));
+            .andExpect(jsonPath("$.message").value("Electronic document issued"))
+            .andExpect(jsonPath("$.data.fullNumber").value("B001-00000001"))
+            .andExpect(jsonPath("$.data.providerReference").value("MOCK-B001-00000001"));
   }
 
   @Test
@@ -119,7 +118,8 @@ class InvoiceDraftControllerTest {
                             {"companyId":"company-1","documentType":"SALES_RECEIPT",
                              "recipientDocumentType":"DNI","recipientDocumentNumber":"12345678",
                              "currency":"pen",
-                             "items":[{"description":" ","quantity":0,"unitPrice":-1}]}
+                             "items":[{"description":" ","unitCode":"NIU","quantity":0,
+                             "unitPrice":-1,"discount":0,"taxAffectation":"TAXED"}]}
                             """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("Validation failed"))
@@ -130,7 +130,8 @@ class InvoiceDraftControllerTest {
     return """
             {"companyId":"company-1","documentType":"SALES_RECEIPT",
              "recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN",
-             "items":[{"description":"Consulting","quantity":2,"unitPrice":150.25}]}
+             "items":[{"description":"Consulting","unitCode":"NIU","quantity":2,
+             "unitPrice":150.25,"discount":0,"taxAffectation":"TAXED"}]}
             """;
   }
 
@@ -158,5 +159,16 @@ class InvoiceDraftControllerTest {
             base.recipientDocumentType(), base.recipientDocumentNumber(), base.currency(), status, base.items(),
             base.subtotal(), base.total(), base.createdAt(), base.updatedAt(), providerReference, issuedAt
     );
+  }
+
+  private ElectronicDocumentResponse electronicDocument() {
+    InvoiceDraftResponse draft = response();
+    return new ElectronicDocumentResponse(
+        UUID.fromString("7a3ebf16-5d2f-4bc2-8178-56373ed2ee5e"), DRAFT_ID,
+        draft.companyId(), draft.customerId(), draft.documentType(), "B001", 1,
+        "B001-00000001", draft.recipientDocumentType(), draft.recipientDocumentNumber(),
+        draft.currency(), draft.items(), draft.subtotal(), BigDecimal.ZERO,
+        new BigDecimal("300.50"), new BigDecimal("54.09"), new BigDecimal("354.59"),
+        "MOCK-B001-00000001", Instant.parse("2026-09-01T11:00:00Z"));
   }
 }

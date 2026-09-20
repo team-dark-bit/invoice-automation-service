@@ -18,12 +18,26 @@ public record InvoiceDraft(
         InvoiceDraftStatus status,
         List<InvoiceItem> items,
         BigDecimal subtotal,
+        BigDecimal discountTotal,
+        BigDecimal taxableTotal,
+        BigDecimal taxTotal,
         BigDecimal total,
         Instant createdAt,
         Instant updatedAt,
         String providerReference,
         Instant issuedAt
 ) {
+
+  public InvoiceDraft(
+      UUID id, String companyId, String customerId, InvoiceDocumentType documentType,
+      IdentityDocumentType recipientDocumentType, String recipientDocumentNumber,
+      String currency, InvoiceDraftStatus status, List<InvoiceItem> items,
+      BigDecimal subtotal, BigDecimal total, Instant createdAt, Instant updatedAt,
+      String providerReference, Instant issuedAt) {
+    this(id, companyId, customerId, documentType, recipientDocumentType,
+        recipientDocumentNumber, currency, status, items, subtotal, BigDecimal.ZERO,
+        BigDecimal.ZERO, BigDecimal.ZERO, total, createdAt, updatedAt, providerReference, issuedAt);
+  }
 
   public InvoiceDraft {
     Objects.requireNonNull(id, "id is required");
@@ -36,6 +50,9 @@ public record InvoiceDraft(
     Objects.requireNonNull(status, "status is required");
     Objects.requireNonNull(items, "items are required");
     Objects.requireNonNull(subtotal, "subtotal is required");
+    Objects.requireNonNull(discountTotal, "discountTotal is required");
+    Objects.requireNonNull(taxableTotal, "taxableTotal is required");
+    Objects.requireNonNull(taxTotal, "taxTotal is required");
     Objects.requireNonNull(total, "total is required");
     Objects.requireNonNull(createdAt, "createdAt is required");
     Objects.requireNonNull(updatedAt, "updatedAt is required");
@@ -66,12 +83,25 @@ public record InvoiceDraft(
           Instant createdAt
   ) {
     BigDecimal subtotal = items.stream()
+            .map(InvoiceItem::grossAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    BigDecimal discountTotal = items.stream()
+            .map(InvoiceItem::discount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    BigDecimal taxableTotal = items.stream()
+            .map(InvoiceItem::taxableAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    BigDecimal taxTotal = items.stream()
+            .map(InvoiceItem::taxAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    BigDecimal total = items.stream()
             .map(InvoiceItem::lineTotal)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     return new InvoiceDraft(
             UUID.randomUUID(), companyId, customerId, documentType, recipientDocumentType,
             recipientDocumentNumber, currency, InvoiceDraftStatus.DRAFT,
-            items, subtotal, subtotal, createdAt, createdAt, null, null
+            items, subtotal, discountTotal, taxableTotal, taxTotal, total,
+            createdAt, createdAt, null, null
     );
   }
 
@@ -104,7 +134,8 @@ public record InvoiceDraft(
   ) {
     return new InvoiceDraft(
             id, companyId, customerId, documentType, recipientDocumentType,
-            recipientDocumentNumber, currency, newStatus, items, subtotal, total,
+            recipientDocumentNumber, currency, newStatus, items, subtotal, discountTotal,
+            taxableTotal, taxTotal, total,
             createdAt, newUpdatedAt, newProviderReference, newIssuedAt
     );
   }

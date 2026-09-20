@@ -25,7 +25,7 @@ class InvoiceDraftTest {
     items.clear();
 
     assertThat(draft.items()).hasSize(1);
-    assertThat(draft.subtotal()).isEqualByComparingTo("375.625000");
+    assertThat(draft.subtotal()).isEqualByComparingTo("375.63");
     assertThat(draft.total()).isEqualByComparingTo(draft.subtotal());
     assertThatThrownBy(() -> draft.items().clear()).isInstanceOf(UnsupportedOperationException.class);
   }
@@ -67,6 +67,30 @@ class InvoiceDraftTest {
     assertThatThrownBy(() -> InvoiceItem.create("Consulting", BigDecimal.ONE, BigDecimal.ONE.negate()))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("unitPrice must not be negative");
+  }
+
+  @Test
+  void calculatesDiscountIgvAndTaxTotals() {
+    InvoiceItem taxed = InvoiceItem.create(
+        "Service", UnitCode.NIU, new BigDecimal("2"), new BigDecimal("100"),
+        new BigDecimal("20"), TaxAffectation.TAXED);
+    InvoiceDraft draft = InvoiceDraft.create(
+        "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+        IdentityDocumentType.DNI, "12345678", "PEN", List.of(taxed), Instant.now());
+
+    assertThat(taxed.grossAmount()).isEqualByComparingTo("200.00");
+    assertThat(taxed.discount()).isEqualByComparingTo("20.00");
+    assertThat(taxed.taxableAmount()).isEqualByComparingTo("180.00");
+    assertThat(taxed.taxAmount()).isEqualByComparingTo("32.40");
+    assertThat(taxed.lineTotal()).isEqualByComparingTo("212.40");
+    assertThat(draft.discountTotal()).isEqualByComparingTo("20.00");
+    assertThat(draft.taxTotal()).isEqualByComparingTo("32.40");
+    assertThat(draft.total()).isEqualByComparingTo("212.40");
+  }
+
+  @Test
+  void formatsDocumentNumberWithEightDigitCorrelative() {
+    assertThat(new DocumentNumber("B001", 25).fullNumber()).isEqualTo("B001-00000025");
   }
 
   @Test

@@ -42,7 +42,7 @@ Crear un borrador completo:
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/invoice-drafts \
   -H "Content-Type: application/json" \
-  -d '{"companyId":"company-id","documentType":"SALES_RECEIPT","recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN","items":[{"description":"Servicio de consultoría","quantity":2,"unitPrice":150.00}]}'
+  -d '{"companyId":"company-id","documentType":"SALES_RECEIPT","recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN","items":[{"description":"Servicio de consultoría","unitCode":"NIU","quantity":2,"unitPrice":150.00,"discount":0,"taxAffectation":"TAXED"}]}'
 ```
 
 Crear una empresa:
@@ -120,6 +120,20 @@ Antes de integrar el proveedor real se incorporaron tres capacidades:
 - **Tipo de comprobante:** `INVOICE` representa factura/código SUNAT `01` y exige receptor con RUC. `SALES_RECEIPT` representa boleta/código SUNAT `03` y admite DNI o RUC.
 
 El alta manual de un cliente ya no es necesaria para crear un borrador. El request recibe `recipientDocumentType` y `recipientDocumentNumber`; el backend crea o reutiliza el `Customer` interno y conserva su identificador para integridad e historial.
+
+## Impuestos, numeración y comprobante definitivo
+
+Los ítems del borrador incluyen unidad de medida, descuento y afectación tributaria. Se soportan `TAXED` (IGV 18 %, código 10), `EXEMPT` (código 20) y `UNAFFECTED` (código 30), junto con unidades `NIU`, `ZZ`, `KGM` y `LTR`. El dominio calcula por ítem y consolida:
+
+- importe bruto;
+- descuento total;
+- base imponible;
+- IGV;
+- total final.
+
+Las series se configuran por empresa y tipo mediante `POST /api/v1/companies/{id}/document-series`. Las facturas utilizan series `F...` y las boletas series `B...`. Al emitir, el correlativo siguiente se reserva dentro de una transacción con bloqueo pesimista, evitando duplicados en emisiones concurrentes.
+
+La emisión crea un `ElectronicDocument` separado del borrador. Este objeto conserva una copia inmutable del receptor, ítems, impuestos, serie, correlativo, número completo y respuesta del proveedor. Puede consultarse mediante `GET /api/v1/electronic-documents/{id}`; no existe API para modificarlo.
 
 ## Alcance de Release 1
 

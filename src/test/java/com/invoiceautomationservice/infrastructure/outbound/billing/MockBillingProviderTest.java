@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
+import com.invoiceautomationservice.domain.model.ElectronicDocument;
+import com.invoiceautomationservice.domain.model.DocumentNumber;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.infrastructure.adapter.out.billing.MockBillingProvider;
 import java.math.BigDecimal;
@@ -28,9 +30,10 @@ class MockBillingProviderTest {
             Instant.parse("2026-09-01T10:00:00Z")
     ).approve(Instant.parse("2026-09-01T11:00:00Z"));
 
-    BillingResult result = provider.issue(approved);
+    ElectronicDocument document = ElectronicDocument.from(approved, new DocumentNumber("B001", 1));
+    BillingResult result = provider.issue(document);
 
-    assertThat(result.reference()).isEqualTo("MOCK-" + approved.id());
+    assertThat(result.reference()).isEqualTo("MOCK-B001-00000001");
     assertThat(result.issuedAt()).isEqualTo(now);
   }
 }

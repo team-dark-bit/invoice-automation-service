@@ -5,6 +5,8 @@ import static com.invoiceautomationservice.infrastructure.config.exception.Runti
 import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.IssuerSnapshot;
+import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.ElectronicDocumentEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.ElectronicDocumentItemEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaElectronicDocumentItemRepository;
@@ -12,6 +14,7 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repos
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -41,10 +44,29 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
     return toDomain(entity, items);
   }
 
+  @Override
+  public Optional<ElectronicDocument> findByDraftId(UUID draftId) {
+    return documentRepository.findByDraftId(draftId).map(entity -> {
+      List<InvoiceItem> items = itemRepository.findAllByDocumentIdOrderByPosition(entity.getId())
+          .stream().map(this::toItem).toList();
+      return toDomain(entity, items);
+    });
+  }
+
   private ElectronicDocumentEntity toEntity(ElectronicDocument document) {
     ElectronicDocumentEntity e = new ElectronicDocumentEntity();
     e.setId(document.id()); e.setDraftId(document.draftId()); e.setCompanyId(document.companyId());
     e.setCustomerId(document.customerId()); e.setDocumentType(document.documentType());
+    e.setIssuerTaxId(document.issuer().taxId()); e.setIssuerLegalName(document.issuer().legalName());
+    e.setIssuerTradeName(document.issuer().tradeName());
+    e.setIssuerTaxpayerType(document.issuer().taxpayerType());
+    e.setIssuerFiscalAddress(document.issuer().fiscalAddress());
+    e.setIssuerUbigeo(document.issuer().ubigeo());
+    e.setIssuerDepartment(document.issuer().department());
+    e.setIssuerProvince(document.issuer().province()); e.setIssuerDistrict(document.issuer().district());
+    e.setIssuerCountryCode(document.issuer().countryCode());
+    e.setRecipientName(document.recipient().name());
+    e.setRecipientAddress(document.recipient().address()); e.setRecipientEmail(document.recipient().email());
     e.setSeries(document.series()); e.setCorrelative(document.correlative());
     e.setFullNumber(document.fullNumber()); e.setRecipientDocumentType(document.recipientDocumentType());
     e.setRecipientDocumentNumber(document.recipientDocumentNumber()); e.setCurrency(document.currency());
@@ -75,8 +97,16 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
   }
 
   private ElectronicDocument toDomain(ElectronicDocumentEntity e, List<InvoiceItem> items) {
+    IssuerSnapshot issuer = new IssuerSnapshot(
+        e.getIssuerTaxId(), e.getIssuerLegalName(), e.getIssuerTradeName(),
+        e.getIssuerTaxpayerType(), e.getIssuerFiscalAddress(), e.getIssuerUbigeo(),
+        e.getIssuerDepartment(), e.getIssuerProvince(), e.getIssuerDistrict(),
+        e.getIssuerCountryCode());
+    RecipientSnapshot recipient = new RecipientSnapshot(
+        e.getRecipientDocumentType(), e.getRecipientDocumentNumber(), e.getRecipientName(),
+        e.getRecipientAddress(), e.getRecipientEmail());
     return new ElectronicDocument(e.getId(), e.getDraftId(), e.getCompanyId(), e.getCustomerId(),
-        e.getDocumentType(), e.getSeries(), e.getCorrelative(), e.getFullNumber(),
+        issuer, recipient, e.getDocumentType(), e.getSeries(), e.getCorrelative(), e.getFullNumber(),
         e.getRecipientDocumentType(), e.getRecipientDocumentNumber(), e.getCurrency(), items,
         e.getSubtotal(), e.getDiscountTotal(), e.getTaxableTotal(), e.getTaxTotal(), e.getTotal(),
         e.getStatus(), e.getProviderReference(), e.getSubmittedAt(), e.getRespondedAt(),

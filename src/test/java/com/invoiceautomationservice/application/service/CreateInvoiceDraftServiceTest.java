@@ -41,9 +41,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class CreateInvoiceDraftServiceTest {
 
@@ -158,7 +160,7 @@ class CreateInvoiceDraftServiceTest {
         "MOCK-" + approved.id(), ElectronicDocumentStatus.ACCEPTED,
         Instant.parse("2026-09-01T10:00:00Z"), Instant.parse("2026-09-01T10:00:00Z"),
         "0", "Accepted");
-    when(draftRepository.findById(approved.id())).thenReturn(approved);
+    when(draftRepository.findByIdForUpdate(approved.id())).thenReturn(approved);
     when(companyRepository.findById("company-1")).thenReturn(company(true));
     when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
         .thenReturn(customer(true));
@@ -175,18 +177,42 @@ class CreateInvoiceDraftServiceTest {
     ElectronicDocumentResponse result = service.issue(approved.id());
 
     assertThat(result).isSameAs(documentResponse);
-    verify(billingProvider).submit(any(BillingSubmission.class));
+    ArgumentCaptor<BillingSubmission> submissionCaptor =
+        ArgumentCaptor.forClass(BillingSubmission.class);
+    verify(billingProvider).submit(submissionCaptor.capture());
+    assertThat(submissionCaptor.getValue().issuer().taxId()).isEqualTo("20123456789");
+    assertThat(submissionCaptor.getValue().recipient().name()).isEqualTo("Customer Name");
+    assertThat(submissionCaptor.getValue().recipient().address()).isEqualTo("Customer address");
+    assertThat(submissionCaptor.getValue().idempotencyKey())
+        .isEqualTo(submissionCaptor.getValue().documentId().toString());
     verify(electronicDocumentRepository, times(2)).save(any(ElectronicDocument.class));
   }
 
   @Test
   void doesNotCallBillingProviderWhenDraftIsNotApproved() {
     InvoiceDraft draft = draft();
-    when(draftRepository.findById(draft.id())).thenReturn(draft);
+    when(draftRepository.findByIdForUpdate(draft.id())).thenReturn(draft);
 
     assertThatThrownBy(() -> service.issue(draft.id()))
             .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
     verifyNoInteractions(billingProvider);
+  }
+
+  @Test
+  void returnsExistingDocumentWithoutCallingProviderAgain() {
+    InvoiceDraft draft = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
+    ElectronicDocument existing = mock(ElectronicDocument.class);
+    ElectronicDocumentResponse response = mock(ElectronicDocumentResponse.class);
+    when(draftRepository.findByIdForUpdate(draft.id())).thenReturn(draft);
+    when(electronicDocumentRepository.findByDraftId(draft.id()))
+        .thenReturn(Optional.of(existing));
+    when(existing.companyId()).thenReturn("company-1");
+    when(electronicDocumentService.toResponse(existing)).thenReturn(response);
+
+    ElectronicDocumentResponse result = service.issue(draft.id());
+
+    assertThat(result).isSameAs(response);
+    verifyNoInteractions(billingProvider, documentSeriesRepository);
   }
 
   private CreateInvoiceDraftRequest request() {
@@ -222,6 +248,8 @@ class CreateInvoiceDraftServiceTest {
     customer.setId("customer-1");
     customer.setCompanyId("company-1");
     customer.setFullName("Customer Name");
+    customer.setAddress("Customer address");
+    customer.setEmail("customer@test.pe");
     customer.setActive(active);
     return customer;
   }

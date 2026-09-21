@@ -47,6 +47,16 @@ public class InvoiceDraftPersistenceAdapter implements InvoiceDraftRepository {
     return toDomain(draft, items);
   }
 
+  @Override
+  public InvoiceDraft findByIdForUpdate(UUID id) {
+    InvoiceDraftEntity draft = draftRepository.findByIdForUpdate(id)
+        .orElseThrow(() -> new ApplicationException(INVOICE_DRAFT_NOT_FOUND, id));
+    List<InvoiceItem> items = itemRepository.findAllByInvoiceDraftIdOrderByPosition(id).stream()
+        .map(itemMapper::toDomain)
+        .toList();
+    return toDomain(draft, items);
+  }
+
   private InvoiceDraft toDomain(InvoiceDraftEntity draft, List<InvoiceItem> items) {
     return new InvoiceDraft(
             draft.getId(), draft.getCompanyId(), draft.getCustomerId(), draft.getDocumentType(),

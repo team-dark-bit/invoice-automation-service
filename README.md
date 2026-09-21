@@ -1,6 +1,6 @@
 # Invoice Assistant
 
-Servicio backend de un SaaS de facturación conversacional. El estado actual cubre los Releases 1 al 8: base hexagonal, configuración multiempresa, borradores con ítems, persistencia PostgreSQL, API REST, validaciones, aprobación y emisión mediante un proveedor simulado. WhatsApp y la integración real de emisión electrónica se incorporarán en releases posteriores.
+Servicio backend de un SaaS de facturación conversacional. El estado actual incluye la base hexagonal, seguridad JWT, aislamiento multiempresa, onboarding tributario, resolución de receptores, borradores con impuestos, series y correlativos, aprobación, comprobantes electrónicos inmutables y seguimiento del proveedor mediante un adaptador simulado. WhatsApp y las integraciones externas reales se incorporarán posteriormente.
 
 ## Arquitectura
 
@@ -77,7 +77,7 @@ Swagger UI: `http://localhost:8080/swagger-ui.html`. Salud: `http://localhost:80
 
 ## Colección Postman
 
-El repositorio incluye una colección ejecutable con todos los endpoints disponibles hasta Release 8:
+El repositorio incluye una colección ejecutable con los endpoints actualmente disponibles:
 
 - Colección: `docs/postman/invoice-automation-service.postman_collection.json`
 - Environment local: `docs/postman/local.postman_environment.json`
@@ -133,7 +133,24 @@ Los ítems del borrador incluyen unidad de medida, descuento y afectación tribu
 
 Las series se configuran por empresa y tipo mediante `POST /api/v1/companies/{id}/document-series`. Las facturas utilizan series `F...` y las boletas series `B...`. Al emitir, el correlativo siguiente se reserva dentro de una transacción con bloqueo pesimista, evitando duplicados en emisiones concurrentes.
 
-La emisión crea un `ElectronicDocument` separado del borrador. Este objeto conserva una copia inmutable del receptor, ítems, impuestos, serie, correlativo, número completo y respuesta del proveedor. Puede consultarse mediante `GET /api/v1/electronic-documents/{id}`; no existe API para modificarlo.
+La emisión crea un `ElectronicDocument` separado del borrador. Este objeto conserva una copia inmutable del emisor, receptor, ítems, impuestos, serie, correlativo, número completo y respuesta del proveedor. Puede consultarse mediante `GET /api/v1/electronic-documents/{id}`; no existe API para modificar sus datos fiscales.
+
+### Snapshot tributario del comprobante
+
+En el momento de emitir se copian al comprobante los datos que no deben cambiar aunque luego se actualice la configuración maestra:
+
+- RUC, razón social, nombre comercial y tipo de contribuyente del emisor;
+- domicilio fiscal, ubigeo, departamento, provincia, distrito y país;
+- tipo y número de documento, nombre o razón social, dirección y correo del receptor;
+- detalle de ítems, unidades, descuentos, afectaciones e importes tributarios.
+
+`BillingSubmission` se construye exclusivamente desde este snapshot. Por tanto, una modificación posterior de `Company`, `IssuerTaxProfile` o `Customer` no altera el JSON correspondiente a un comprobante ya numerado. La migración Flyway `V14__snapshot_issuer_and_recipient.sql` amplía los clientes con dirección y correo opcionales, y completa el snapshot de los comprobantes existentes.
+
+### Idempotencia de emisión
+
+`POST /api/v1/invoice-drafts/{id}/issue` es idempotente por borrador. Si ya existe un comprobante para el mismo `draftId`, devuelve exactamente ese documento sin consumir otro correlativo ni invocar nuevamente a `BillingProvider`.
+
+La emisión adquiere un bloqueo pesimista sobre el borrador para serializar solicitudes concurrentes. El identificador de `ElectronicDocument` se deriva de forma determinística del ID del borrador y se envía como `BillingSubmission.idempotencyKey`; el adaptador real debe transmitirlo al campo equivalente del proveedor, por ejemplo `codigo_unico` en NUBEFACT. La restricción única de `electronic_documents.draft_id` permanece como última defensa en la base de datos.
 
 ### Envío y aceptación del proveedor
 
@@ -253,8 +270,8 @@ La aprobación solamente confirma que el agregado está listo para emitirse; no 
 
 Introduce la abstracción necesaria para emitir una factura sin acoplar el caso de uso a un proveedor específico:
 
-- Define el puerto de salida `BillingProvider`, que recibe un borrador aprobado y devuelve una referencia y fecha de emisión.
-- Implementa `MockBillingProvider`, un adaptador local determinista que genera referencias con el formato `MOCK-{invoiceDraftId}`.
+- Define el puerto de salida `BillingProvider`, que recibe un `BillingSubmission` construido desde el comprobante numerado y devuelve su resultado de envío.
+- Implementa `MockBillingProvider`, un adaptador local determinista que genera referencias con el formato `MOCK-{fullNumber}`.
 - Selecciona el proveedor mediante `BILLING_PROVIDER`; el valor predeterminado es `mock`.
 - Añade el estado `ISSUED` y la transición `APPROVED → ISSUED`.
 - Persiste `providerReference` e `issuedAt` mediante una migración Flyway incremental.
@@ -262,6 +279,4 @@ Introduce la abstracción necesaria para emitir una factura sin acoplar el caso 
 - Expone `POST /api/v1/invoice-drafts/{id}/issue` para ejecutar el flujo completo con el mock.
 - Incluye pruebas del adaptador mock, del caso de uso, del dominio y del contrato HTTP.
 
-La futura integración con SUNAT implementará el mismo puerto `BillingProvider`, permitiendo sustituir el mock sin modificar el dominio ni el controlador.
-
-Hasta este punto no se incluyen impuestos, descuentos, proveedor SUNAT real, autenticación, WhatsApp ni inteligencia artificial.
+La futura integración con el proveedor de facturación implementará el mismo puerto `BillingProvider`, permitiendo sustituir el mock sin modificar el dominio ni el controlador. Los apartados posteriores de este README describen las capacidades tributarias y de seguridad añadidas después de la versión inicial de este release.

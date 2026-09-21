@@ -28,6 +28,8 @@ import com.invoiceautomationservice.application.dto.response.ElectronicDocumentR
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
+import com.invoiceautomationservice.domain.model.IssuerSnapshot;
+import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -108,19 +110,25 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   @Override
   @Transactional
   public ElectronicDocumentResponse issue(UUID id) {
-    InvoiceDraft approved = invoiceDraftRepository.findById(id);
+    InvoiceDraft approved = invoiceDraftRepository.findByIdForUpdate(id);
     companyAccessService.requireAccess(approved.companyId());
+    var existingDocument = electronicDocumentRepository.findByDraftId(id);
+    if (existingDocument.isPresent()) {
+      return electronicDocumentService.toResponse(existingDocument.get());
+    }
     approved.ensureCanBeIssued();
     var documentNumber = documentSeriesRepository.reserveNext(
         approved.companyId(), approved.documentType());
-    ElectronicDocument provisional = ElectronicDocument.from(approved, documentNumber);
-    electronicDocumentRepository.save(provisional);
     Company company = companyRepository.findById(approved.companyId());
     Customer customer = customerRepository.findByIdAndCompanyId(
         approved.customerId(), approved.companyId());
     IssuerTaxProfile taxProfile = issuerTaxProfileRepository.findByCompanyId(approved.companyId());
-    BillingResult result = billingProvider.submit(toBillingSubmission(
-        provisional, company, customer, taxProfile));
+    IssuerSnapshot issuer = toIssuerSnapshot(company, taxProfile);
+    RecipientSnapshot recipient = toRecipientSnapshot(approved, customer);
+    ElectronicDocument provisional = ElectronicDocument.from(
+        approved, documentNumber, issuer, recipient);
+    electronicDocumentRepository.save(provisional);
+    BillingResult result = billingProvider.submit(toBillingSubmission(provisional));
     ElectronicDocument issuedDocument = provisional.withBillingResult(result);
     ElectronicDocument savedDocument = electronicDocumentRepository.save(issuedDocument);
     if (result.status() == ElectronicDocumentStatus.SENT
@@ -131,19 +139,31 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     return electronicDocumentService.toResponse(savedDocument);
   }
 
-  private BillingSubmission toBillingSubmission(
-      ElectronicDocument document,
-      Company company,
-      Customer customer,
-      IssuerTaxProfile profile) {
-    BillingSubmission.Issuer issuer = new BillingSubmission.Issuer(
+  private IssuerSnapshot toIssuerSnapshot(Company company, IssuerTaxProfile profile) {
+    return new IssuerSnapshot(
         company.getTaxId(), company.getLegalName(), company.getTradeName(),
         profile.taxpayerType(), profile.fiscalAddress(), profile.ubigeo(), profile.department(),
         profile.province(), profile.district(), profile.countryCode());
-    String recipientName = customer.getCompanyName() == null || customer.getCompanyName().isBlank()
+  }
+
+  private RecipientSnapshot toRecipientSnapshot(InvoiceDraft draft, Customer customer) {
+    String name = customer.getCompanyName() == null || customer.getCompanyName().isBlank()
         ? customer.getFullName() : customer.getCompanyName();
+    return new RecipientSnapshot(
+        draft.recipientDocumentType(), draft.recipientDocumentNumber(), name,
+        customer.getAddress(), customer.getEmail());
+  }
+
+  private BillingSubmission toBillingSubmission(ElectronicDocument document) {
+    IssuerSnapshot snapshot = document.issuer();
+    BillingSubmission.Issuer issuer = new BillingSubmission.Issuer(
+        snapshot.taxId(), snapshot.legalName(), snapshot.tradeName(), snapshot.taxpayerType(),
+        snapshot.fiscalAddress(), snapshot.ubigeo(), snapshot.department(), snapshot.province(),
+        snapshot.district(), snapshot.countryCode());
+    RecipientSnapshot recipientSnapshot = document.recipient();
     BillingSubmission.Recipient recipient = new BillingSubmission.Recipient(
-        document.recipientDocumentType(), document.recipientDocumentNumber(), recipientName);
+        recipientSnapshot.documentType(), recipientSnapshot.documentNumber(),
+        recipientSnapshot.name(), recipientSnapshot.address(), recipientSnapshot.email());
     List<BillingSubmission.Item> providerItems = document.items().stream()
         .map(item -> new BillingSubmission.Item(
             item.description(), item.unitCode(), item.quantity(), item.unitPrice(), item.discount(),
@@ -151,7 +171,8 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
             item.taxAmount(), item.lineTotal()))
         .toList();
     return new BillingSubmission(
-        document.id(), document.fullNumber(), document.series(), document.correlative(),
+        document.id(), document.id().toString(), document.fullNumber(),
+        document.series(), document.correlative(),
         document.documentType(), document.currency(),
         issuer, recipient, providerItems, document.subtotal(), document.discountTotal(),
         document.taxableTotal(), document.taxTotal(), document.total());

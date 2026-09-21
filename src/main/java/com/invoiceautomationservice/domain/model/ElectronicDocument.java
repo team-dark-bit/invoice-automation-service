@@ -5,12 +5,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 public record ElectronicDocument(
     UUID id,
     UUID draftId,
     String companyId,
     String customerId,
+    IssuerSnapshot issuer,
+    RecipientSnapshot recipient,
     InvoiceDocumentType documentType,
     String series,
     long correlative,
@@ -36,6 +39,8 @@ public record ElectronicDocument(
     Objects.requireNonNull(draftId);
     Objects.requireNonNull(companyId);
     Objects.requireNonNull(customerId);
+    Objects.requireNonNull(issuer);
+    Objects.requireNonNull(recipient);
     Objects.requireNonNull(documentType);
     Objects.requireNonNull(series);
     Objects.requireNonNull(fullNumber);
@@ -43,6 +48,10 @@ public record ElectronicDocument(
     Objects.requireNonNull(recipientDocumentNumber);
     Objects.requireNonNull(currency);
     Objects.requireNonNull(status);
+    if (recipient.documentType() != recipientDocumentType
+        || !recipient.documentNumber().equals(recipientDocumentNumber)) {
+      throw new IllegalArgumentException("recipient snapshot must match document identity");
+    }
     items = List.copyOf(items);
     if (status == ElectronicDocumentStatus.PENDING_SEND
         && (providerReference != null || submittedAt != null)) {
@@ -50,13 +59,23 @@ public record ElectronicDocument(
     }
   }
 
-  public static ElectronicDocument from(InvoiceDraft draft, DocumentNumber number) {
+  public static ElectronicDocument from(
+      InvoiceDraft draft,
+      DocumentNumber number,
+      IssuerSnapshot issuer,
+      RecipientSnapshot recipient) {
     return new ElectronicDocument(
-        UUID.randomUUID(), draft.id(), draft.companyId(), draft.customerId(), draft.documentType(),
+        deterministicId(draft.id()), draft.id(), draft.companyId(), draft.customerId(), issuer, recipient,
+        draft.documentType(),
         number.series(), number.correlative(), number.fullNumber(), draft.recipientDocumentType(),
         draft.recipientDocumentNumber(), draft.currency(), draft.items(), draft.subtotal(),
         draft.discountTotal(), draft.taxableTotal(), draft.taxTotal(), draft.total(),
         ElectronicDocumentStatus.PENDING_SEND, null, null, null, null, null);
+  }
+
+  private static UUID deterministicId(UUID draftId) {
+    return UUID.nameUUIDFromBytes(
+        ("electronic-document:" + draftId).getBytes(StandardCharsets.UTF_8));
   }
 
   public ElectronicDocument withBillingResult(BillingResult result) {
@@ -65,7 +84,8 @@ public record ElectronicDocument(
       throw new IllegalStateException("a document with final provider status cannot be changed");
     }
     return new ElectronicDocument(
-        id, draftId, companyId, customerId, documentType, series, correlative, fullNumber,
+        id, draftId, companyId, customerId, issuer, recipient, documentType, series, correlative,
+        fullNumber,
         recipientDocumentType, recipientDocumentNumber, currency, items, subtotal, discountTotal,
         taxableTotal, taxTotal, total, result.status(), result.reference(),
         submittedAt == null ? result.submittedAt() : submittedAt,

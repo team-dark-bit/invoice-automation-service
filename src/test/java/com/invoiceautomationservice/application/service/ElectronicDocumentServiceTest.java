@@ -15,6 +15,9 @@ import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.IssuerSnapshot;
+import com.invoiceautomationservice.domain.model.RecipientSnapshot;
+import com.invoiceautomationservice.domain.model.TaxpayerType;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -56,6 +59,11 @@ class ElectronicDocumentServiceTest {
         IdentityDocumentType.DNI, "12345678", "PEN",
         List.of(InvoiceItem.create("Service", BigDecimal.ONE, BigDecimal.TEN)),
         Instant.parse("2026-09-20T09:00:00Z"));
-    return ElectronicDocument.from(draft, new DocumentNumber("B001", 1));
+    IssuerSnapshot issuer = new IssuerSnapshot(
+        "20123456789", "Company SAC", "Company", TaxpayerType.LEGAL_ENTITY,
+        "Lima", "150101", "Lima", "Lima", "Lima", "PE");
+    RecipientSnapshot recipient = new RecipientSnapshot(
+        IdentityDocumentType.DNI, "12345678", "Customer", null, null);
+    return ElectronicDocument.from(draft, new DocumentNumber("B001", 1), issuer, recipient);
   }
 }

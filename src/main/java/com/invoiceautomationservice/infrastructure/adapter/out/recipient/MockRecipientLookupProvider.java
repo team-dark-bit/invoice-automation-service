@@ -18,8 +18,8 @@ public class MockRecipientLookupProvider implements RecipientLookupProvider {
   public RecipientLookupResult lookup(
       IdentityDocumentType documentType, String documentNumber) {
     if (documentType == IdentityDocumentType.RUC) {
-      return new RecipientLookupResult(null, "Empresa RUC " + documentNumber);
+      return new RecipientLookupResult(null, "Empresa RUC " + documentNumber, null, null);
     }
-    return new RecipientLookupResult("Persona DNI " + documentNumber, null);
+    return new RecipientLookupResult("Persona DNI " + documentNumber, null, null, null);
   }
 }

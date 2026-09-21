@@ -3,6 +3,8 @@ package com.invoiceautomationservice.application.dto.response;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
+import com.invoiceautomationservice.domain.model.IssuerSnapshot;
+import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -13,6 +15,8 @@ public record ElectronicDocumentResponse(
     UUID draftId,
     String companyId,
     String customerId,
+    IssuerSnapshot issuer,
+    RecipientSnapshot recipient,
     InvoiceDocumentType documentType,
     String series,
     long correlative,

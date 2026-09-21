@@ -46,6 +46,7 @@ public class ElectronicDocumentService {
   public ElectronicDocumentResponse toResponse(ElectronicDocument document) {
     return new ElectronicDocumentResponse(
         document.id(), document.draftId(), document.companyId(), document.customerId(),
+        document.issuer(), document.recipient(),
         document.documentType(), document.series(), document.correlative(), document.fullNumber(),
         document.recipientDocumentType(), document.recipientDocumentNumber(), document.currency(),
         document.items().stream().map(this::toItemResponse).toList(), document.subtotal(),

@@ -45,6 +45,8 @@ public class RecipientResolutionService {
     customer.setDocumentNumber(documentNumber);
     customer.setFullName(lookup.fullName());
     customer.setCompanyName(lookup.companyName());
+    customer.setAddress(lookup.address());
+    customer.setEmail(lookup.email());
     customer.setActive(true);
     return customerRepository.save(customer);
   }

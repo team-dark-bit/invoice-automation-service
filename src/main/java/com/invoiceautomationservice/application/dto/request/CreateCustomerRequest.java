@@ -17,6 +17,10 @@ public class CreateCustomerRequest {
 
   private String phoneNumber;
 
+  private String address;
+
+  private String email;
+
   private Boolean active = true;
 
 }

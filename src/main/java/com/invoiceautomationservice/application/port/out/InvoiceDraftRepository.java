@@ -6,4 +6,5 @@ import java.util.UUID;
 public interface InvoiceDraftRepository {
   InvoiceDraft save(InvoiceDraft invoiceDraft);
   InvoiceDraft findById(UUID id);
+  InvoiceDraft findByIdForUpdate(UUID id);
 }

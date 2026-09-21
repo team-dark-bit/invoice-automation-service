@@ -24,12 +24,13 @@ class MockBillingProviderTest {
     Instant now = Instant.parse("2026-09-01T12:00:00Z");
     MockBillingProvider provider = new MockBillingProvider(Clock.fixed(now, ZoneOffset.UTC));
     BillingSubmission submission = new BillingSubmission(
-        UUID.randomUUID(), "B001-00000001", "B001", 1,
+        UUID.randomUUID(), "idempotency-key", "B001-00000001", "B001", 1,
         InvoiceDocumentType.SALES_RECEIPT, "PEN",
         new BillingSubmission.Issuer("20123456789", "Issuer SAC", "Issuer",
             TaxpayerType.LEGAL_ENTITY, "Lima",
             "150101", "Lima", "Lima", "Lima", "PE"),
-        new BillingSubmission.Recipient(IdentityDocumentType.DNI, "12345678", "Customer"),
+        new BillingSubmission.Recipient(
+            IdentityDocumentType.DNI, "12345678", "Customer", "Lima", "customer@test.pe"),
         List.of(), BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN,
         BigDecimal.ZERO, BigDecimal.TEN);
     BillingResult result = provider.submit(submission);

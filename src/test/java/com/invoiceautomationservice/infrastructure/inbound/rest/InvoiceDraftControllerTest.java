@@ -165,7 +165,14 @@ class InvoiceDraftControllerTest {
     InvoiceDraftResponse draft = response();
     return new ElectronicDocumentResponse(
         UUID.fromString("7a3ebf16-5d2f-4bc2-8178-56373ed2ee5e"), DRAFT_ID,
-        draft.companyId(), draft.customerId(), draft.documentType(), "B001", 1,
+        draft.companyId(), draft.customerId(),
+        new com.invoiceautomationservice.domain.model.IssuerSnapshot(
+            "20123456789", "Company SAC", "Company",
+            com.invoiceautomationservice.domain.model.TaxpayerType.LEGAL_ENTITY,
+            "Lima", "150101", "Lima", "Lima", "Lima", "PE"),
+        new com.invoiceautomationservice.domain.model.RecipientSnapshot(
+            draft.recipientDocumentType(), draft.recipientDocumentNumber(), "Customer", null, null),
+        draft.documentType(), "B001", 1,
         "B001-00000001", draft.recipientDocumentType(), draft.recipientDocumentNumber(),
         draft.currency(), draft.items(), draft.subtotal(), BigDecimal.ZERO,
         new BigDecimal("300.50"), new BigDecimal("54.09"), new BigDecimal("354.59"),

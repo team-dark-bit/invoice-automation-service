@@ -327,7 +327,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Postman Customer\",\n  \"companyName\": \"Postman Test SAC\",\n  \"documentType\": \"DNI\",\n  \"documentNumber\": \"{{documentNumber}}\",\n  \"phoneNumber\": \"999999999\",\n  \"active\": true\n}",
+              "raw": "{\n  \"fullName\": \"Postman Customer\",\n  \"companyName\": \"Postman Test SAC\",\n  \"documentType\": \"DNI\",\n  \"documentNumber\": \"{{documentNumber}}\",\n  \"phoneNumber\": \"999999999\",\n  \"address\": \"Av. Cliente 456\",\n  \"email\": \"cliente@example.com\",\n  \"active\": true\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -541,10 +541,35 @@
                 "  pm.expect(document.fullNumber).to.match(/^B001-\\d{8}$/);",
                 "  pm.expect(document.providerReference).to.eql(`MOCK-${document.fullNumber}`);",
                 "  pm.expect(document.status).to.eql('ACCEPTED');",
+                "  pm.expect(document.issuer.taxId).to.eql(pm.environment.get('taxId'));",
+                "  pm.expect(document.recipient.documentNumber).to.eql(pm.environment.get('recipientDocumentNumber'));",
                 "  pm.expect(document.submittedAt).to.be.a('string').and.not.empty;",
                 "  pm.expect(document.respondedAt).to.be.a('string').and.not.empty;",
                 "});"
                 ,"pm.environment.set('electronicDocumentId', document.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Repeat issue idempotently",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/issue",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "issue"]
+            },
+            "description": "Repite la emisión y comprueba que no se cree otro documento ni correlativo."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Returns the original electronic document', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('electronicDocumentId')));"
               ]
             }
           }]

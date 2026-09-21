@@ -24,6 +24,8 @@ public class CustomerEntity {
   private String documentType;
   private String documentNumber;
   private String phoneNumber;
+  private String address;
+  private String email;
   private Boolean active;
 
 }

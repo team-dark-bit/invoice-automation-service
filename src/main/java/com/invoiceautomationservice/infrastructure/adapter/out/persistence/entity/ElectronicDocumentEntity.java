@@ -3,6 +3,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence.enti
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
+import com.invoiceautomationservice.domain.model.TaxpayerType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,6 +25,20 @@ public class ElectronicDocumentEntity {
   @Column(name = "draft_id", nullable = false, unique = true) private UUID draftId;
   @Column(name = "company_id", nullable = false) private String companyId;
   @Column(name = "customer_id", nullable = false) private String customerId;
+  @Column(name = "issuer_tax_id", nullable = false) private String issuerTaxId;
+  @Column(name = "issuer_legal_name", nullable = false) private String issuerLegalName;
+  @Column(name = "issuer_trade_name") private String issuerTradeName;
+  @Enumerated(EnumType.STRING) @Column(name = "issuer_taxpayer_type", nullable = false)
+  private TaxpayerType issuerTaxpayerType;
+  @Column(name = "issuer_fiscal_address", nullable = false) private String issuerFiscalAddress;
+  @Column(name = "issuer_ubigeo", nullable = false, length = 6) private String issuerUbigeo;
+  @Column(name = "issuer_department") private String issuerDepartment;
+  @Column(name = "issuer_province") private String issuerProvince;
+  @Column(name = "issuer_district") private String issuerDistrict;
+  @Column(name = "issuer_country_code", nullable = false, length = 2) private String issuerCountryCode;
+  @Column(name = "recipient_name", nullable = false) private String recipientName;
+  @Column(name = "recipient_address") private String recipientAddress;
+  @Column(name = "recipient_email") private String recipientEmail;
   @Enumerated(EnumType.STRING) @Column(name = "document_type", nullable = false)
   private InvoiceDocumentType documentType;
   @Column(nullable = false, length = 4) private String series;

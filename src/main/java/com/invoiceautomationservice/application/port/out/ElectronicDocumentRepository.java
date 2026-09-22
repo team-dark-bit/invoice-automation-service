@@ -7,5 +7,6 @@ import java.util.Optional;
 public interface ElectronicDocumentRepository {
   ElectronicDocument save(ElectronicDocument document);
   ElectronicDocument findById(UUID id);
+  ElectronicDocument findByIdForUpdate(UUID id);
   Optional<ElectronicDocument> findByDraftId(UUID draftId);
 }

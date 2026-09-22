@@ -10,11 +10,8 @@ import com.invoiceautomationservice.application.dto.response.InvoiceDraftRespons
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
-import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
-import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
-import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
@@ -27,7 +24,6 @@ import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
-import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
 import com.invoiceautomationservice.domain.model.IssuerSnapshot;
 import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
@@ -45,15 +41,13 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final CompanyRepository companyRepository;
-  private final CustomerRepository customerRepository;
   private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
   private final CompanyAccessService companyAccessService;
   private final IssuerTaxProfileRepository issuerTaxProfileRepository;
   private final RecipientResolutionService recipientResolutionService;
-  private final DocumentSeriesRepository documentSeriesRepository;
-  private final ElectronicDocumentRepository electronicDocumentRepository;
   private final ElectronicDocumentService electronicDocumentService;
+  private final InvoiceIssuancePersistenceService issuancePersistenceService;
   private final Clock clock;
 
   @Override
@@ -108,50 +102,31 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   }
 
   @Override
-  @Transactional
   public ElectronicDocumentResponse issue(UUID id) {
-    InvoiceDraft approved = invoiceDraftRepository.findByIdForUpdate(id);
-    companyAccessService.requireAccess(approved.companyId());
-    var existingDocument = electronicDocumentRepository.findByDraftId(id);
-    if (existingDocument.isPresent()) {
-      return electronicDocumentService.toResponse(existingDocument.get());
+    PreparedEmission prepared = issuancePersistenceService.prepare(id);
+    if (!prepared.submitRequired()) {
+      return electronicDocumentService.toResponse(prepared.document());
     }
-    approved.ensureCanBeIssued();
-    var documentNumber = documentSeriesRepository.reserveNext(
-        approved.companyId(), approved.documentType());
-    Company company = companyRepository.findById(approved.companyId());
-    Customer customer = customerRepository.findByIdAndCompanyId(
-        approved.customerId(), approved.companyId());
-    IssuerTaxProfile taxProfile = issuerTaxProfileRepository.findByCompanyId(approved.companyId());
-    IssuerSnapshot issuer = toIssuerSnapshot(company, taxProfile);
-    RecipientSnapshot recipient = toRecipientSnapshot(approved, customer);
-    ElectronicDocument provisional = ElectronicDocument.from(
-        approved, documentNumber, issuer, recipient);
-    electronicDocumentRepository.save(provisional);
-    BillingResult result = billingProvider.submit(toBillingSubmission(provisional));
-    ElectronicDocument issuedDocument = provisional.withBillingResult(result);
-    ElectronicDocument savedDocument = electronicDocumentRepository.save(issuedDocument);
-    if (result.status() == ElectronicDocumentStatus.SENT
-        || result.status() == ElectronicDocumentStatus.ACCEPTED) {
-      InvoiceDraft issued = approved.markIssued(result.reference(), result.submittedAt());
-      invoiceDraftRepository.save(issued);
+
+    BillingResult result;
+    try {
+      result = billingProvider.submit(toBillingSubmission(prepared.document()));
+    } catch (RuntimeException exception) {
+      Instant failedAt = Instant.now(clock);
+      result = new BillingResult(
+          null, ElectronicDocumentStatus.ERROR,
+          failedAt, failedAt, "PROVIDER_CALL_FAILED", providerFailureMessage(exception));
     }
-    return electronicDocumentService.toResponse(savedDocument);
+    ElectronicDocument completed = issuancePersistenceService.complete(
+        prepared.document().id(), result);
+    return electronicDocumentService.toResponse(completed);
   }
 
-  private IssuerSnapshot toIssuerSnapshot(Company company, IssuerTaxProfile profile) {
-    return new IssuerSnapshot(
-        company.getTaxId(), company.getLegalName(), company.getTradeName(),
-        profile.taxpayerType(), profile.fiscalAddress(), profile.ubigeo(), profile.department(),
-        profile.province(), profile.district(), profile.countryCode());
-  }
-
-  private RecipientSnapshot toRecipientSnapshot(InvoiceDraft draft, Customer customer) {
-    String name = customer.getCompanyName() == null || customer.getCompanyName().isBlank()
-        ? customer.getFullName() : customer.getCompanyName();
-    return new RecipientSnapshot(
-        draft.recipientDocumentType(), draft.recipientDocumentNumber(), name,
-        customer.getAddress(), customer.getEmail());
+  private String providerFailureMessage(RuntimeException exception) {
+    String message = exception.getMessage();
+    String detail = message == null || message.isBlank()
+        ? exception.getClass().getSimpleName() : message;
+    return detail.length() <= 1000 ? detail : detail.substring(0, 1000);
   }
 
   private BillingSubmission toBillingSubmission(ElectronicDocument document) {

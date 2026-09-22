@@ -152,6 +152,16 @@ En el momento de emitir se copian al comprobante los datos que no deben cambiar 
 
 La emisión adquiere un bloqueo pesimista sobre el borrador para serializar solicitudes concurrentes. El identificador de `ElectronicDocument` se deriva de forma determinística del ID del borrador y se envía como `BillingSubmission.idempotencyKey`; el adaptador real debe transmitirlo al campo equivalente del proveedor, por ejemplo `codigo_unico` en NUBEFACT. La restricción única de `electronic_documents.draft_id` permanece como última defensa en la base de datos.
 
+### Separación entre persistencia y proveedor
+
+La emisión no mantiene una transacción de base de datos abierta mientras espera una respuesta HTTP del proveedor. El flujo se divide en tres fases:
+
+1. Una transacción corta bloquea el borrador, reserva el correlativo y confirma el `ElectronicDocument` como `PENDING_SEND`.
+2. `BillingProvider.submit(...)` se ejecuta fuera de cualquier transacción de persistencia, usando el ID determinístico como clave de idempotencia.
+3. Otra transacción corta bloquea el comprobante y guarda la respuesta. Si el proveedor falla con una excepción, se persiste el estado `ERROR` junto con el código `PROVIDER_CALL_FAILED`; si responde `SENT` o `ACCEPTED`, el borrador pasa a `ISSUED`.
+
+De esta forma, una lentitud o caída externa no retiene conexiones ni bloqueos de PostgreSQL y tampoco revierte la numeración ya asignada. Un cierre abrupto entre las fases deja un registro auditable en `PENDING_SEND`, preparado para el mecanismo de reintentos controlados.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

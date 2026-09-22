@@ -53,6 +53,15 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
     });
   }
 
+  @Override
+  public ElectronicDocument findByIdForUpdate(UUID id) {
+    ElectronicDocumentEntity entity = documentRepository.findByIdForUpdate(id)
+        .orElseThrow(() -> new ApplicationException(ELECTRONIC_DOCUMENT_NOT_FOUND, id));
+    List<InvoiceItem> items = itemRepository.findAllByDocumentIdOrderByPosition(id).stream()
+        .map(this::toItem).toList();
+    return toDomain(entity, items);
+  }
+
   private ElectronicDocumentEntity toEntity(ElectronicDocument document) {
     ElectronicDocumentEntity e = new ElectronicDocumentEntity();
     e.setId(document.id()); e.setDraftId(document.draftId()); e.setCompanyId(document.companyId());

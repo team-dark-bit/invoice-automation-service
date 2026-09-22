@@ -7,17 +7,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.times;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
-import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
-import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
-import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
@@ -33,7 +29,8 @@ import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.DocumentNumber;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
-import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
+import com.invoiceautomationservice.domain.model.IssuerSnapshot;
+import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.domain.model.TaxpayerType;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.math.BigDecimal;
@@ -41,7 +38,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,35 +47,31 @@ class CreateInvoiceDraftServiceTest {
 
   private InvoiceDraftRepository draftRepository;
   private CompanyRepository companyRepository;
-  private CustomerRepository customerRepository;
   private IssuerTaxProfileRepository issuerTaxProfileRepository;
   private RecipientResolutionService recipientResolutionService;
   private InvoiceDraftDomainResponseMapper mapper;
   private BillingProvider billingProvider;
   private InvoiceDraftService service;
   private CompanyAccessService accessService;
-  private DocumentSeriesRepository documentSeriesRepository;
-  private ElectronicDocumentRepository electronicDocumentRepository;
   private ElectronicDocumentService electronicDocumentService;
+  private InvoiceIssuancePersistenceService issuancePersistenceService;
 
   @BeforeEach
   void setUp() {
     draftRepository = mock(InvoiceDraftRepository.class);
     companyRepository = mock(CompanyRepository.class);
-    customerRepository = mock(CustomerRepository.class);
     issuerTaxProfileRepository = mock(IssuerTaxProfileRepository.class);
     recipientResolutionService = mock(RecipientResolutionService.class);
     mapper = mock(InvoiceDraftDomainResponseMapper.class);
     billingProvider = mock(BillingProvider.class);
     accessService = mock(CompanyAccessService.class);
-    documentSeriesRepository = mock(DocumentSeriesRepository.class);
-    electronicDocumentRepository = mock(ElectronicDocumentRepository.class);
     electronicDocumentService = mock(ElectronicDocumentService.class);
+    issuancePersistenceService = mock(InvoiceIssuancePersistenceService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     service = new InvoiceDraftService(
-            draftRepository, companyRepository, customerRepository, billingProvider, mapper, accessService,
-            issuerTaxProfileRepository, recipientResolutionService, documentSeriesRepository,
-            electronicDocumentRepository, electronicDocumentService, clock
+            draftRepository, companyRepository, billingProvider, mapper, accessService,
+            issuerTaxProfileRepository, recipientResolutionService, electronicDocumentService,
+            issuancePersistenceService, clock
     );
   }
 
@@ -160,17 +152,12 @@ class CreateInvoiceDraftServiceTest {
         "MOCK-" + approved.id(), ElectronicDocumentStatus.ACCEPTED,
         Instant.parse("2026-09-01T10:00:00Z"), Instant.parse("2026-09-01T10:00:00Z"),
         "0", "Accepted");
-    when(draftRepository.findByIdForUpdate(approved.id())).thenReturn(approved);
-    when(companyRepository.findById("company-1")).thenReturn(company(true));
-    when(customerRepository.findByIdAndCompanyId("customer-1", "company-1"))
-        .thenReturn(customer(true));
-    when(issuerTaxProfileRepository.findByCompanyId("company-1")).thenReturn(taxProfile());
-    when(documentSeriesRepository.reserveNext("company-1", InvoiceDocumentType.SALES_RECEIPT))
-            .thenReturn(new DocumentNumber("B001", 1));
+    ElectronicDocument pending = electronicDocument(approved);
+    ElectronicDocument completed = pending.withBillingResult(billingResult);
+    when(issuancePersistenceService.prepare(approved.id()))
+        .thenReturn(new PreparedEmission(pending, true));
     when(billingProvider.submit(any(BillingSubmission.class))).thenReturn(billingResult);
-    when(electronicDocumentRepository.save(any(ElectronicDocument.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-    when(draftRepository.save(any(InvoiceDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(issuancePersistenceService.complete(pending.id(), billingResult)).thenReturn(completed);
     ElectronicDocumentResponse documentResponse = mock(ElectronicDocumentResponse.class);
     when(electronicDocumentService.toResponse(any(ElectronicDocument.class))).thenReturn(documentResponse);
 
@@ -185,13 +172,15 @@ class CreateInvoiceDraftServiceTest {
     assertThat(submissionCaptor.getValue().recipient().address()).isEqualTo("Customer address");
     assertThat(submissionCaptor.getValue().idempotencyKey())
         .isEqualTo(submissionCaptor.getValue().documentId().toString());
-    verify(electronicDocumentRepository, times(2)).save(any(ElectronicDocument.class));
+    verify(issuancePersistenceService).complete(pending.id(), billingResult);
   }
 
   @Test
   void doesNotCallBillingProviderWhenDraftIsNotApproved() {
     InvoiceDraft draft = draft();
-    when(draftRepository.findByIdForUpdate(draft.id())).thenReturn(draft);
+    when(issuancePersistenceService.prepare(draft.id())).thenThrow(
+        new com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException(
+            draft.status(), com.invoiceautomationservice.domain.model.InvoiceDraftStatus.APPROVED));
 
     assertThatThrownBy(() -> service.issue(draft.id()))
             .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
@@ -201,18 +190,39 @@ class CreateInvoiceDraftServiceTest {
   @Test
   void returnsExistingDocumentWithoutCallingProviderAgain() {
     InvoiceDraft draft = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
-    ElectronicDocument existing = mock(ElectronicDocument.class);
+    ElectronicDocument existing = electronicDocument(draft);
     ElectronicDocumentResponse response = mock(ElectronicDocumentResponse.class);
-    when(draftRepository.findByIdForUpdate(draft.id())).thenReturn(draft);
-    when(electronicDocumentRepository.findByDraftId(draft.id()))
-        .thenReturn(Optional.of(existing));
-    when(existing.companyId()).thenReturn("company-1");
+    when(issuancePersistenceService.prepare(draft.id()))
+        .thenReturn(new PreparedEmission(existing, false));
     when(electronicDocumentService.toResponse(existing)).thenReturn(response);
 
     ElectronicDocumentResponse result = service.issue(draft.id());
 
     assertThat(result).isSameAs(response);
-    verifyNoInteractions(billingProvider, documentSeriesRepository);
+    verifyNoInteractions(billingProvider);
+  }
+
+  @Test
+  void persistsErrorWhenProviderCallFails() {
+    InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
+    ElectronicDocument pending = electronicDocument(approved);
+    ElectronicDocumentResponse response = mock(ElectronicDocumentResponse.class);
+    when(issuancePersistenceService.prepare(approved.id()))
+        .thenReturn(new PreparedEmission(pending, true));
+    when(billingProvider.submit(any(BillingSubmission.class)))
+        .thenThrow(new IllegalStateException("Provider unavailable"));
+    when(issuancePersistenceService.complete(any(UUID.class), any(BillingResult.class)))
+        .thenAnswer(invocation -> pending.withBillingResult(invocation.getArgument(1)));
+    when(electronicDocumentService.toResponse(any(ElectronicDocument.class))).thenReturn(response);
+
+    assertThat(service.issue(approved.id())).isSameAs(response);
+
+    ArgumentCaptor<BillingResult> resultCaptor = ArgumentCaptor.forClass(BillingResult.class);
+    verify(issuancePersistenceService).complete(org.mockito.ArgumentMatchers.eq(pending.id()),
+        resultCaptor.capture());
+    assertThat(resultCaptor.getValue().status()).isEqualTo(ElectronicDocumentStatus.ERROR);
+    assertThat(resultCaptor.getValue().responseCode()).isEqualTo("PROVIDER_CALL_FAILED");
+    assertThat(resultCaptor.getValue().responseMessage()).isEqualTo("Provider unavailable");
   }
 
   private CreateInvoiceDraftRequest request() {
@@ -254,11 +264,14 @@ class CreateInvoiceDraftServiceTest {
     return customer;
   }
 
-  private IssuerTaxProfile taxProfile() {
-    Instant now = Instant.parse("2026-09-01T10:00:00Z");
-    return new IssuerTaxProfile(
-        "company-1", TaxpayerType.LEGAL_ENTITY, "Lima", "150101",
-        "Lima", "Lima", "Lima", "PE", now, now);
+  private ElectronicDocument electronicDocument(InvoiceDraft draft) {
+    IssuerSnapshot issuer = new IssuerSnapshot(
+        "20123456789", "Company SAC", "Company", TaxpayerType.LEGAL_ENTITY,
+        "Lima", "150101", "Lima", "Lima", "Lima", "PE");
+    RecipientSnapshot recipient = new RecipientSnapshot(
+        IdentityDocumentType.DNI, "12345678", "Customer Name",
+        "Customer address", "customer@test.pe");
+    return ElectronicDocument.from(draft, new DocumentNumber("B001", 1), issuer, recipient);
   }
 
   private InvoiceDraftResponse response(InvoiceDraft draft) {

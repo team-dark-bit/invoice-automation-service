@@ -41,6 +41,13 @@ public class ElectronicDocumentEntity {
   @Column(name = "recipient_email") private String recipientEmail;
   @Enumerated(EnumType.STRING) @Column(name = "document_type", nullable = false)
   private InvoiceDocumentType documentType;
+  @Column(name = "related_document_id") private UUID relatedDocumentId;
+  @Enumerated(EnumType.STRING) @Column(name = "related_document_type")
+  private InvoiceDocumentType relatedDocumentType;
+  @Column(name = "related_series", length = 4) private String relatedSeries;
+  @Column(name = "related_correlative") private Long relatedCorrelative;
+  @Column(name = "note_reason_code", length = 2) private String noteReasonCode;
+  @Column(name = "note_reason", length = 500) private String noteReason;
   @Column(nullable = false, length = 4) private String series;
   @Column(nullable = false) private Long correlative;
   @Column(name = "full_number", nullable = false) private String fullNumber;

@@ -38,8 +38,11 @@ public class DocumentSeriesService {
   }
 
   private void validatePrefix(InvoiceDocumentType type, String series) {
-    boolean valid = type == InvoiceDocumentType.INVOICE
-        ? series.startsWith("F") : series.startsWith("B");
+    boolean valid = switch (type) {
+      case INVOICE -> series.startsWith("F");
+      case SALES_RECEIPT -> series.startsWith("B");
+      case CREDIT_NOTE, DEBIT_NOTE -> series.startsWith("F") || series.startsWith("B");
+    };
     if (!valid) {
       throw new ApplicationException(INVALID_DOCUMENT_SERIES, series, type);
     }

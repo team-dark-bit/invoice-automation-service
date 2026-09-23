@@ -35,7 +35,11 @@ public enum RuntimeErrors implements ApplicationError {
     ELECTRONIC_DOCUMENT_NOT_RETRYABLE(CONFLICT,
             "The electronic document with id: %s cannot be retried from status %s"),
     INVOICE_DRAFT_ALREADY_NUMBERED(CONFLICT,
-            "The invoice draft with id: %s already has a numbered electronic document");
+            "The invoice draft with id: %s already has a numbered electronic document"),
+    ELECTRONIC_DOCUMENT_NOT_ADJUSTABLE(CONFLICT,
+            "The electronic document with id: %s cannot receive a note from status %s"),
+    INVALID_NOTE_REASON(BAD_REQUEST,
+            "The reason code %s is invalid for document type %s");
 
     private final HttpStatus status;
     private final String message;

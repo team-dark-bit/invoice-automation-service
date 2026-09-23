@@ -9,6 +9,9 @@ import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
 import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
+import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.CreditNoteReason;
+import com.invoiceautomationservice.domain.model.DebitNoteReason;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -62,11 +65,51 @@ public class ElectronicDocumentService {
     return toResponse(completed);
   }
 
+  public ElectronicDocumentResponse createCreditNote(
+      UUID originalId, String reasonCode, String reason) {
+    try {
+      CreditNoteReason.fromCode(reasonCode);
+    } catch (IllegalArgumentException exception) {
+      throw new com.invoiceautomationservice.infrastructure.config.exception.ApplicationException(
+          com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.INVALID_NOTE_REASON,
+          reasonCode, InvoiceDocumentType.CREDIT_NOTE);
+    }
+    return createAdjustment(originalId, InvoiceDocumentType.CREDIT_NOTE, reasonCode, reason);
+  }
+
+  public ElectronicDocumentResponse createDebitNote(
+      UUID originalId, String reasonCode, String reason) {
+    try {
+      DebitNoteReason.fromCode(reasonCode);
+    } catch (IllegalArgumentException exception) {
+      throw new com.invoiceautomationservice.infrastructure.config.exception.ApplicationException(
+          com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.INVALID_NOTE_REASON,
+          reasonCode, InvoiceDocumentType.DEBIT_NOTE);
+    }
+    return createAdjustment(originalId, InvoiceDocumentType.DEBIT_NOTE, reasonCode, reason);
+  }
+
+  public ElectronicDocumentResponse cancel(UUID originalId, String reason) {
+    return createAdjustment(originalId, InvoiceDocumentType.CREDIT_NOTE,
+        CreditNoteReason.OPERATION_CANCELLATION.code(), reason);
+  }
+
+  private ElectronicDocumentResponse createAdjustment(
+      UUID originalId, InvoiceDocumentType type, String reasonCode, String reason) {
+    PreparedEmission prepared = issuancePersistenceService.prepareAdjustment(
+        originalId, type, reasonCode, reason);
+    ElectronicDocument result = prepared.submitRequired()
+        ? billingSubmissionService.submit(prepared.document()) : prepared.document();
+    return toResponse(result);
+  }
+
   public ElectronicDocumentResponse toResponse(ElectronicDocument document) {
     return new ElectronicDocumentResponse(
         document.id(), document.draftId(), document.companyId(), document.customerId(),
         document.issuer(), document.recipient(),
-        document.documentType(), document.series(), document.correlative(), document.fullNumber(),
+        document.documentType(), document.relatedDocumentId(), document.relatedDocumentType(),
+        document.relatedSeries(), document.relatedCorrelative(), document.noteReasonCode(),
+        document.noteReason(), document.series(), document.correlative(), document.fullNumber(),
         document.recipientDocumentType(), document.recipientDocumentNumber(), document.currency(),
         document.emissionAt(),
         document.items().stream().map(this::toItemResponse).toList(), document.subtotal(),

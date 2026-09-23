@@ -54,6 +54,9 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   @Override
   @Transactional
   public InvoiceDraftResponse create(CreateInvoiceDraftRequest request) {
+    if (!request.documentType().isPrimaryDocument()) {
+      throw new IllegalArgumentException("credit and debit notes must reference an issued document");
+    }
     companyAccessService.requireAccess(request.companyId());
     Company company = companyRepository.findById(request.companyId());
     if (!company.isActive()) {
@@ -110,6 +113,9 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(id);
     companyAccessService.requireAccess(draft.companyId());
     draft.ensureEditable();
+    if (!request.documentType().isPrimaryDocument()) {
+      throw new IllegalArgumentException("credit and debit notes must reference an issued document");
+    }
     if (request.documentType() == InvoiceDocumentType.INVOICE
         && request.recipientDocumentType() != IdentityDocumentType.RUC) {
       throw new ApplicationException(INVOICE_REQUIRES_RUC);

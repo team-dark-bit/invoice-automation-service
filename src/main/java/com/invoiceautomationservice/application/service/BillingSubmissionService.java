@@ -65,6 +65,8 @@ public class BillingSubmissionService {
     return new BillingSubmission(
         document.id(), document.id().toString(), document.fullNumber(),
         document.series(), document.correlative(), document.documentType(),
+        document.relatedDocumentType(), document.relatedSeries(), document.relatedCorrelative(),
+        document.noteReasonCode(), document.noteReason(),
         "generar_comprobante", "1", document.emissionAt(), document.currency(),
         currencyCode(document.currency()),
         issuer, recipient, providerItems, document.subtotal(), document.discountTotal(),

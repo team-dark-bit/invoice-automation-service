@@ -25,7 +25,8 @@ class MockBillingProviderTest {
     MockBillingProvider provider = new MockBillingProvider(Clock.fixed(now, ZoneOffset.UTC));
     BillingSubmission submission = new BillingSubmission(
         UUID.randomUUID(), "idempotency-key", "B001-00000001", "B001", 1,
-        InvoiceDocumentType.SALES_RECEIPT, "generar_comprobante", "1", now, "PEN", "1",
+        InvoiceDocumentType.SALES_RECEIPT, null, null, null, null, null,
+        "generar_comprobante", "1", now, "PEN", "1",
         new BillingSubmission.Issuer("20123456789", "Issuer SAC", "Issuer",
             TaxpayerType.LEGAL_ENTITY, "Lima",
             "150101", "Lima", "Lima", "Lima", "PE"),

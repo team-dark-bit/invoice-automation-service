@@ -207,7 +207,7 @@ class InvoiceDraftControllerTest {
             "Lima", "150101", "Lima", "Lima", "Lima", "PE"),
         new com.invoiceautomationservice.domain.model.RecipientSnapshot(
             draft.recipientDocumentType(), draft.recipientDocumentNumber(), "Customer", null, null),
-        draft.documentType(), "B001", 1,
+        draft.documentType(), null, null, null, null, null, null, "B001", 1,
         "B001-00000001", draft.recipientDocumentType(), draft.recipientDocumentNumber(),
         draft.currency(), Instant.parse("2026-09-01T10:30:00Z"),
         draft.items(), draft.subtotal(), BigDecimal.ZERO,

@@ -721,6 +721,36 @@
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns document page', () => pm.expect(pm.response.json().data.content).to.be.an('array')); "]}}]
         }
       ]
+    },
+    {
+      "name": "Credit, Debit Notes and Cancellation",
+      "item": [
+        {
+          "name":"Configure credit note series",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"documentType\":\"CREDIT_NOTE\",\"series\":\"B002\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/document-series","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","document-series"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name":"Configure debit note series",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"documentType\":\"DEBIT_NOTE\",\"series\":\"B003\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/document-series","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","document-series"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name":"Issue credit note",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"reasonCode\":\"06\",\"reason\":\"Devolución total\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}/credit-notes","host":["{{baseUrl}}"],"path":["api","v1","electronic-documents","{{electronicDocumentId}}","credit-notes"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('References original', () => { const note=pm.response.json().data; pm.expect(note.documentType).to.eql('CREDIT_NOTE'); pm.expect(note.relatedDocumentId).to.eql(pm.environment.get('electronicDocumentId')); });"]}}]
+        },
+        {
+          "name":"Issue debit note",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"reasonCode\":\"02\",\"reason\":\"Aumento de valor\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}/debit-notes","host":["{{baseUrl}}"],"path":["api","v1","electronic-documents","{{electronicDocumentId}}","debit-notes"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Creates debit note', () => pm.expect(pm.response.json().data.documentType).to.eql('DEBIT_NOTE')); "]}}]
+        },
+        {
+          "name":"Cancel with credit note",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"reason\":\"Anulación de la operación\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}/cancel","host":["{{baseUrl}}"],"path":["api","v1","electronic-documents","{{electronicDocumentId}}","cancel"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Cancellation is credit note reason 01', () => { const note=pm.response.json().data; pm.expect(note.documentType).to.eql('CREDIT_NOTE'); pm.expect(note.noteReasonCode).to.eql('01'); });"]}}]
+        }
+      ]
     }
   ]
 }

@@ -201,6 +201,18 @@ Los borradores y comprobantes se ordenan del más reciente al más antiguo; empr
 
 La fecha de emisión se guarda en `ElectronicDocument.emissionAt` y no cambia durante los reintentos. La migración `V17__add_electronic_document_emission_date.sql` completa ese snapshot para bases existentes. El adaptador NUBEFACT real únicamente deberá serializar estos valores con los nombres JSON del proveedor y añadir URL/token de cada empresa.
 
+### Notas de crédito, débito y anulaciones
+
+Las notas son nuevos `ElectronicDocument` inmutables y numerados que referencian al comprobante original mediante tipo, serie y correlativo. Solo pueden generarse sobre facturas o boletas en estado `ACCEPTED`, pertenecientes a la empresa autenticada.
+
+- `POST /api/v1/electronic-documents/{id}/credit-notes`: nota de crédito completa con motivos `01` a `10`.
+- `POST /api/v1/electronic-documents/{id}/debit-notes`: nota de débito completa con motivos `01` intereses, `02` aumento de valor y `03` penalidades.
+- `POST /api/v1/electronic-documents/{id}/cancel`: anulación mediante nota de crédito motivo `01`.
+
+Cada operación conserva el snapshot del emisor, receptor, moneda, ítems e impuestos; genera IDs de ítem nuevos y usa una serie propia `CREDIT_NOTE` o `DEBIT_NOTE` con el mismo prefijo `F`/`B` del documento afectado. La combinación documento original, tipo de nota y motivo es idempotente. El comprobante original nunca se elimina ni se modifica.
+
+La migración `V18__add_credit_debit_notes.sql` habilita los tipos `07`/`08`, referencias tributarias y restricciones de integridad. En esta etapa el proveedor mock acepta las notas; la comunicación real con NUBEFACT se realizará a través del mismo `BillingProvider`.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

@@ -9,4 +9,6 @@ public interface DocumentSeriesRepository {
   DocumentSeries save(DocumentSeries series);
   List<DocumentSeries> findAllByCompanyId(String companyId);
   DocumentNumber reserveNext(String companyId, InvoiceDocumentType documentType);
+  DocumentNumber reserveNext(
+      String companyId, InvoiceDocumentType documentType, String seriesPrefix);
 }

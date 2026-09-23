@@ -82,6 +82,28 @@ public class InvoiceIssuancePersistenceService {
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public PreparedEmission prepareAdjustment(
+      UUID originalId, com.invoiceautomationservice.domain.model.InvoiceDocumentType noteType,
+      String reasonCode, String reason) {
+    ElectronicDocument original = electronicDocumentRepository.findByIdForUpdate(originalId);
+    companyAccessService.requireAccess(original.companyId());
+    var existing = electronicDocumentRepository.findAdjustment(originalId, noteType, reasonCode);
+    if (existing.isPresent()) return new PreparedEmission(existing.get(), false);
+    if (original.status() != ElectronicDocumentStatus.ACCEPTED
+        || !original.documentType().isPrimaryDocument()) {
+      throw new com.invoiceautomationservice.infrastructure.config.exception.ApplicationException(
+          com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors
+              .ELECTRONIC_DOCUMENT_NOT_ADJUSTABLE, original.id(), original.status());
+    }
+    var number = documentSeriesRepository.reserveNext(
+        original.companyId(), noteType, original.series().substring(0, 1));
+    ElectronicDocument note = ElectronicDocument.noteFrom(
+        original, number, noteType, reasonCode, reason, Instant.now(clock))
+        .startSubmission(Instant.now(clock));
+    return new PreparedEmission(electronicDocumentRepository.save(note), true);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public ElectronicDocument complete(
       UUID documentId, Instant attemptStartedAt, BillingResult result) {
     ElectronicDocument document = electronicDocumentRepository.findByIdForUpdate(documentId);
@@ -95,8 +117,8 @@ public class InvoiceIssuancePersistenceService {
     }
     ElectronicDocument saved = electronicDocumentRepository.save(
         document.withBillingResult(result));
-    if (result.status() == ElectronicDocumentStatus.SENT
-        || result.status() == ElectronicDocumentStatus.ACCEPTED) {
+    if (document.draftId() != null && (result.status() == ElectronicDocumentStatus.SENT
+        || result.status() == ElectronicDocumentStatus.ACCEPTED)) {
       InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(document.draftId());
       if (draft.status() == InvoiceDraftStatus.APPROVED) {
         invoiceDraftRepository.save(draft.markIssued(result.reference(), result.submittedAt()));

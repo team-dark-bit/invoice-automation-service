@@ -13,6 +13,10 @@ public interface JpaElectronicDocumentRepository
     extends JpaRepository<ElectronicDocumentEntity, UUID>,
     org.springframework.data.jpa.repository.JpaSpecificationExecutor<ElectronicDocumentEntity> {
   Optional<ElectronicDocumentEntity> findByDraftId(UUID draftId);
+  Optional<ElectronicDocumentEntity> findByRelatedDocumentIdAndDocumentTypeAndNoteReasonCode(
+      UUID relatedDocumentId,
+      com.invoiceautomationservice.domain.model.InvoiceDocumentType documentType,
+      String noteReasonCode);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select document from ElectronicDocumentEntity document where document.id = :id")

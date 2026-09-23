@@ -60,6 +60,16 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
   }
 
   @Override
+  public Optional<ElectronicDocument> findAdjustment(
+      UUID relatedDocumentId, com.invoiceautomationservice.domain.model.InvoiceDocumentType type,
+      String reasonCode) {
+    return documentRepository.findByRelatedDocumentIdAndDocumentTypeAndNoteReasonCode(
+        relatedDocumentId, type, reasonCode).map(entity -> toDomain(entity,
+        itemRepository.findAllByDocumentIdOrderByPosition(entity.getId()).stream()
+            .map(this::toItem).toList()));
+  }
+
+  @Override
   public PageResult<ElectronicDocument> search(
       String companyId, ElectronicDocumentStatus status, String documentNumber,
       PageQuery pageQuery) {
@@ -96,6 +106,10 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
     ElectronicDocumentEntity e = new ElectronicDocumentEntity();
     e.setId(document.id()); e.setDraftId(document.draftId()); e.setCompanyId(document.companyId());
     e.setCustomerId(document.customerId()); e.setDocumentType(document.documentType());
+    e.setRelatedDocumentId(document.relatedDocumentId());
+    e.setRelatedDocumentType(document.relatedDocumentType());
+    e.setRelatedSeries(document.relatedSeries()); e.setRelatedCorrelative(document.relatedCorrelative());
+    e.setNoteReasonCode(document.noteReasonCode()); e.setNoteReason(document.noteReason());
     e.setIssuerTaxId(document.issuer().taxId()); e.setIssuerLegalName(document.issuer().legalName());
     e.setIssuerTradeName(document.issuer().tradeName());
     e.setIssuerTaxpayerType(document.issuer().taxpayerType());
@@ -146,7 +160,9 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
         e.getRecipientDocumentType(), e.getRecipientDocumentNumber(), e.getRecipientName(),
         e.getRecipientAddress(), e.getRecipientEmail());
     return new ElectronicDocument(e.getId(), e.getDraftId(), e.getCompanyId(), e.getCustomerId(),
-        issuer, recipient, e.getDocumentType(), e.getSeries(), e.getCorrelative(), e.getFullNumber(),
+        issuer, recipient, e.getDocumentType(), e.getRelatedDocumentId(), e.getRelatedDocumentType(),
+        e.getRelatedSeries(), e.getRelatedCorrelative(), e.getNoteReasonCode(), e.getNoteReason(),
+        e.getSeries(), e.getCorrelative(), e.getFullNumber(),
         e.getRecipientDocumentType(), e.getRecipientDocumentNumber(), e.getCurrency(),
         e.getEmissionAt(), items,
         e.getSubtotal(), e.getDiscountTotal(), e.getTaxableTotal(), e.getTaxTotal(), e.getTotal(),

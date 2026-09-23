@@ -206,6 +206,29 @@ class InvoiceIssuancePersistenceServiceTest {
     verify(documentRepository, never()).save(any());
   }
 
+  @Test
+  void preparesCreditNoteOnlyOnceAndReservesItsOwnSeries() {
+    Instant acceptedAt = Instant.parse("2026-09-01T09:50:00Z");
+    ElectronicDocument original = document(approvedDraft()).withBillingResult(new BillingResult(
+        "provider-original", ElectronicDocumentStatus.ACCEPTED, acceptedAt, acceptedAt,
+        "0", "Accepted"));
+    when(documentRepository.findByIdForUpdate(original.id())).thenReturn(original);
+    when(documentRepository.findAdjustment(
+        original.id(), InvoiceDocumentType.CREDIT_NOTE, "01")).thenReturn(Optional.empty());
+    when(seriesRepository.reserveNext("company-1", InvoiceDocumentType.CREDIT_NOTE, "B"))
+        .thenReturn(new DocumentNumber("B001", 2));
+    when(documentRepository.save(any(ElectronicDocument.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    PreparedEmission prepared = service.prepareAdjustment(
+        original.id(), InvoiceDocumentType.CREDIT_NOTE, "01", "Cancellation");
+
+    assertThat(prepared.document().status()).isEqualTo(ElectronicDocumentStatus.SENDING);
+    assertThat(prepared.document().relatedDocumentId()).isEqualTo(original.id());
+    assertThat(prepared.document().fullNumber()).isEqualTo("B001-00000002");
+    assertThat(prepared.document().draftId()).isNull();
+  }
+
   private InvoiceDraft approvedDraft() {
     return InvoiceDraft.create(
         "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,

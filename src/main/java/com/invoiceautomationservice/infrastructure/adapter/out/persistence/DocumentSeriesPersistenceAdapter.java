@@ -36,6 +36,21 @@ public class DocumentSeriesPersistenceAdapter implements DocumentSeriesRepositor
         .findFirstByCompanyIdAndDocumentTypeAndActiveTrueOrderBySeries(companyId, documentType)
         .orElseThrow(() -> new ApplicationException(
             DOCUMENT_SERIES_NOT_FOUND, documentType, companyId));
+    return increment(entity);
+  }
+
+  @Override
+  public DocumentNumber reserveNext(
+      String companyId, InvoiceDocumentType documentType, String seriesPrefix) {
+    DocumentSeriesEntity entity = repository
+        .findFirstByCompanyIdAndDocumentTypeAndSeriesStartingWithAndActiveTrueOrderBySeries(
+            companyId, documentType, seriesPrefix)
+        .orElseThrow(() -> new ApplicationException(
+            DOCUMENT_SERIES_NOT_FOUND, documentType, companyId));
+    return increment(entity);
+  }
+
+  private DocumentNumber increment(DocumentSeriesEntity entity) {
     long next = entity.getCurrentCorrelative() + 1;
     entity.setCurrentCorrelative(next);
     repository.save(entity);

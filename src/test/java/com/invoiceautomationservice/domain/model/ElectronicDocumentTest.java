@@ -40,6 +40,30 @@ class ElectronicDocumentTest {
         .isInstanceOf(UnsupportedOperationException.class);
   }
 
+  @Test
+  void createsImmutableCreditNoteReferencingOriginalDocument() {
+    InvoiceDraft draft = InvoiceDraft.create(
+        "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,
+        IdentityDocumentType.DNI, "12345678", "PEN",
+        List.of(InvoiceItem.create("Service", BigDecimal.ONE, new BigDecimal("100"))),
+        Instant.parse("2026-09-23T10:00:00Z"));
+    ElectronicDocument original = ElectronicDocument.from(
+        draft, new DocumentNumber("B001", 10), issuer(), recipient());
+
+    ElectronicDocument note = ElectronicDocument.noteFrom(
+        original, new DocumentNumber("B001", 2), InvoiceDocumentType.CREDIT_NOTE,
+        "01", "Anulación de la operación", Instant.parse("2026-09-23T11:00:00Z"));
+
+    assertThat(note.documentType()).isEqualTo(InvoiceDocumentType.CREDIT_NOTE);
+    assertThat(note.relatedDocumentId()).isEqualTo(original.id());
+    assertThat(note.relatedDocumentType()).isEqualTo(InvoiceDocumentType.SALES_RECEIPT);
+    assertThat(note.relatedSeries()).isEqualTo("B001");
+    assertThat(note.relatedCorrelative()).isEqualTo(10);
+    assertThat(note.noteReasonCode()).isEqualTo("01");
+    assertThat(note.total()).isEqualByComparingTo(original.total());
+    assertThat(note.items().getFirst().id()).isNotEqualTo(original.items().getFirst().id());
+  }
+
   private IssuerSnapshot issuer() {
     return new IssuerSnapshot(
         "20123456789", "Company SAC", "Company", TaxpayerType.LEGAL_ENTITY,

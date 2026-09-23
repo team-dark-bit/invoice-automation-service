@@ -4,6 +4,7 @@ import com.invoiceautomationservice.application.dto.response.ElectronicDocumentR
 import com.invoiceautomationservice.application.dto.response.PageResponse;
 import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.application.service.ElectronicDocumentService;
+import com.invoiceautomationservice.application.dto.request.CreateAdjustmentNoteRequest;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -57,5 +60,29 @@ public class ElectronicDocumentController {
     ElectronicDocumentResponse document = service.retry(id);
     return ResponseEntity.ok(ApiResponse.success(
         200, "Electronic document submission retried", document));
+  }
+
+  @PostMapping("/{id}/credit-notes")
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> createCreditNote(
+      @PathVariable UUID id, @RequestBody @Valid CreateAdjustmentNoteRequest request) {
+    return ResponseEntity.ok(ApiResponse.success(200, "Credit note issued",
+        service.createCreditNote(id, request.reasonCode(), request.reason())));
+  }
+
+  @PostMapping("/{id}/debit-notes")
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> createDebitNote(
+      @PathVariable UUID id, @RequestBody @Valid CreateAdjustmentNoteRequest request) {
+    return ResponseEntity.ok(ApiResponse.success(200, "Debit note issued",
+        service.createDebitNote(id, request.reasonCode(), request.reason())));
+  }
+
+  @PostMapping("/{id}/cancel")
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> cancel(
+      @PathVariable UUID id,
+      @RequestBody(required = false) java.util.Map<String, String> request) {
+    String reason = request == null ? "Anulación de la operación"
+        : request.getOrDefault("reason", "Anulación de la operación");
+    return ResponseEntity.ok(ApiResponse.success(200, "Cancellation credit note issued",
+        service.cancel(id, reason)));
   }
 }

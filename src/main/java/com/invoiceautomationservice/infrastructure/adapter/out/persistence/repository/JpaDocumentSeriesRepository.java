@@ -14,4 +14,9 @@ public interface JpaDocumentSeriesRepository extends JpaRepository<DocumentSerie
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   Optional<DocumentSeriesEntity> findFirstByCompanyIdAndDocumentTypeAndActiveTrueOrderBySeries(
       String companyId, InvoiceDocumentType documentType);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  Optional<DocumentSeriesEntity>
+      findFirstByCompanyIdAndDocumentTypeAndSeriesStartingWithAndActiveTrueOrderBySeries(
+          String companyId, InvoiceDocumentType documentType, String seriesPrefix);
 }

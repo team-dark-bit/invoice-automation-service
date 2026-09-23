@@ -6,6 +6,9 @@ import com.invoiceautomationservice.application.dto.response.ConversationRespons
 import com.invoiceautomationservice.application.dto.response.MessageResponse;
 import com.invoiceautomationservice.application.dto.response.PageResponse;
 import com.invoiceautomationservice.application.service.ConversationService;
+import com.invoiceautomationservice.application.port.in.ConversationEngineUseCase;
+import com.invoiceautomationservice.application.dto.request.ProcessConversationRequest;
+import com.invoiceautomationservice.application.dto.response.ConversationEngineResponse;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import com.invoiceautomationservice.domain.model.ConversationStatus;
 import jakarta.validation.Valid;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ConversationController {
   private final ConversationService service;
+  private final ConversationEngineUseCase engine;
 
   @PostMapping
   public ResponseEntity<ApiResponse<ConversationResponse>> create(
@@ -75,5 +79,12 @@ public class ConversationController {
   @PostMapping("/{id}/close")
   public ResponseEntity<ApiResponse<ConversationResponse>> close(@PathVariable UUID id) {
     return ResponseEntity.ok(ApiResponse.success(200, "Conversation closed", service.close(id)));
+  }
+
+  @PostMapping("/{id}/process")
+  public ResponseEntity<ApiResponse<ConversationEngineResponse>> process(
+      @PathVariable UUID id, @RequestBody @Valid ProcessConversationRequest request) {
+    return ResponseEntity.ok(ApiResponse.success(200, "Message processed",
+        engine.process(id, request.text(), request.externalMessageId())));
   }
 }

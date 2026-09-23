@@ -22,6 +22,12 @@ public class MessagePersistenceAdapter implements MessageRepository {
   }
 
   @Override
+  public boolean existsByConversationIdAndExternalMessageId(
+      java.util.UUID conversationId, String externalMessageId) {
+    return repository.existsByConversationIdAndExternalMessageId(conversationId, externalMessageId);
+  }
+
+  @Override
   public PageResult<Message> findByConversationId(
       java.util.UUID conversationId, PageQuery pageQuery) {
     var page = repository.findAllByConversationId(conversationId, PageRequest.of(

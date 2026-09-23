@@ -249,7 +249,25 @@ Los endpoints disponibles son:
 - `POST /api/v1/conversations/{id}/messages` y `GET /api/v1/conversations/{id}/messages` para agregar y paginar mensajes en orden cronológico.
 - `POST /api/v1/conversations/{id}/close` para cerrar el hilo.
 
-El acceso usa `CONVERSATION_READ` y `CONVERSATION_MANAGE`: `OWNER` y `ADMIN` poseen ambos; `BILLING` puede operar conversaciones; `VIEWER` solo consultarlas. La migración `V21__create_conversations_and_messages.sql` crea las tablas, claves foráneas, restricciones, índices y protección contra mensajes externos duplicados dentro de una conversación. En este punto solo existe el modelo y su API; la interpretación conversacional independiente del canal corresponde al punto 12.
+El acceso usa `CONVERSATION_READ` y `CONVERSATION_MANAGE`: `OWNER` y `ADMIN` poseen ambos; `BILLING` puede operar conversaciones; `VIEWER` solo consultarlas. La migración `V21__create_conversations_and_messages.sql` crea las tablas, claves foráneas, restricciones, índices y protección contra mensajes externos duplicados dentro de una conversación. Esta base es utilizada por el motor conversacional descrito a continuación.
+
+### Motor conversacional independiente del canal
+
+El caso de uso `ConversationEngineUseCase` recibe únicamente `conversationId`, texto e identificador externo; no conoce HTTP, WhatsApp ni ningún SDK. Cada adaptador de canal puede entregar el mismo comando al motor y utilizar la respuesta textual. `POST /api/v1/conversations/{id}/process` es el adaptador REST disponible para pruebas.
+
+El flujo determinista, todavía sin IA, acepta:
+
+- `NUEVA BOLETA DNI 12345678 PEN`
+- `NUEVA FACTURA RUC 20123456789 PEN`
+- `AGREGAR 2 | Servicio mensual | 100.00`
+- `RESUMEN`
+- `GENERAR`
+- `CANCELAR`
+- `AYUDA`
+
+El motor guarda el mensaje entrante y su respuesta, mantiene el contexto `EMPTY`, `COLLECTING_ITEMS` o `DRAFT_CREATED`, acumula ítems y utiliza `InvoiceDraftUseCase` para generar el mismo borrador que la API tradicional. No emite ni aprueba automáticamente: el resultado siempre queda como borrador revisable. Una nueva orden `NUEVA ...` reinicia los datos en preparación, mientras `CANCELAR` limpia el contexto sin eliminar borradores previamente creados.
+
+`externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
 ### Envío y aceptación del proveedor
 

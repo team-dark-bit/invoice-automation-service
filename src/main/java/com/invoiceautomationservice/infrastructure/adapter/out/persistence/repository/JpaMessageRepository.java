@@ -8,4 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaMessageRepository extends JpaRepository<MessageEntity, UUID> {
   Page<MessageEntity> findAllByConversationId(UUID conversationId, Pageable pageable);
+  boolean existsByConversationIdAndExternalMessageId(UUID conversationId, String externalMessageId);
 }

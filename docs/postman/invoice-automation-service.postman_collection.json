@@ -44,6 +44,51 @@
               }
             }
           ]
+        },
+        {
+          "name": "Liveness probe",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "X-Correlation-Id", "value": "postman-liveness-check" }],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health/liveness",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health", "liveness"]
+            },
+            "description": "Probe de vida con un identificador de correlación trazable en logs y respuesta."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Correlation ID is propagated', () => pm.expect(pm.response.headers.get('X-Correlation-Id')).to.eql('postman-liveness-check'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Readiness probe",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health/readiness",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health", "readiness"]
+            },
+            "description": "Comprueba que la aplicación está preparada para recibir tráfico."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]
+            }
+          }]
         }
       ]
     },
@@ -102,6 +147,29 @@
               "exec": [
                 "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
                 "pm.test('Returns authenticated user', () => pm.expect(pm.response.json().data.username).to.eql(pm.environment.get('adminUsername')));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Prometheus metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "prometheus"]
+            },
+            "description": "Métricas protegidas para Prometheus. Requiere el JWT capturado por Login."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Prometheus payload', () => pm.expect(pm.response.text()).to.include('application_ready_time_seconds'));"
               ]
             }
           }]

@@ -283,6 +283,31 @@ La suite rápida continúa ejecutándose con `./mvnw test` (`.\\mvnw.cmd test` e
 
 Maven Failsafe ejecuta estas pruebas durante la fase `verify`. Si Docker no está disponible, Testcontainers marca únicamente la suite de infraestructura como omitida; en CI debe considerarse Docker un requisito y comprobarse que no existan pruebas omitidas.
 
+### Configuración segura y observabilidad
+
+El perfil local conserva valores por defecto únicamente para desarrollo. Para un despliegue real se debe activar `SPRING_PROFILES_ACTIVE=prod`; este perfil no contiene credenciales utilizables y exige las variables `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` y `BILLING_PROVIDER`. `DB_PORT`, `JWT_EXPIRATION_MS` y `RECIPIENT_LOOKUP_PROVIDER` son configurables. La aplicación rechaza el arranque en `prod` si el secreto JWT tiene menos de 32 caracteres, si se usa el secreto local conocido o si la contraseña de base de datos tiene menos de 12 caracteres. Los secretos nunca deben versionarse: deben proceder del gestor de secretos del entorno.
+
+Ejemplo mínimo de variables de producción (los valores son deliberadamente ficticios):
+
+```text
+SPRING_PROFILES_ACTIVE=prod
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=invoice_automation_service
+DB_USER=invoice_app
+DB_PASSWORD=<secret-de-al-menos-12-caracteres>
+JWT_SECRET=<secret-aleatorio-de-al-menos-32-caracteres>
+JWT_EXPIRATION_MS=3600000
+BILLING_PROVIDER=mock
+RECIPIENT_LOOKUP_PROVIDER=mock
+```
+
+Spring Boot Actuator expone `health`, `info`, `metrics` y `prometheus`. Los endpoints `/actuator/health`, sus probes `/liveness` y `/readiness`, y `/actuator/info` son públicos para la plataforma; `/actuator/metrics/**` y `/actuator/prometheus` requieren un JWT válido. El indicador de Flyway reporta `DOWN` si existen migraciones pendientes, sin revelar credenciales. Las llamadas al proveedor registran los contadores `billing_submissions_total` y la duración `billing_submission_duration_seconds`, etiquetados solo por tipo documental y resultado para evitar cardinalidad no acotada.
+
+Cada respuesta incluye `X-Correlation-Id`. Si la petición proporciona un valor seguro de hasta 64 caracteres, se conserva; de lo contrario se genera un UUID. El mismo identificador se añade al contexto de logging y se limpia al terminar la petición, facilitando el seguimiento de una operación sin mezclar solicitudes. También se habilitó apagado graceful con un máximo de 20 segundos para terminar trabajo en curso.
+
+La carpeta `Monitoring` de Postman prueba salud y probes sin autenticación. Después de `Login`, la petición `Prometheus metrics` comprueba el endpoint protegido.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

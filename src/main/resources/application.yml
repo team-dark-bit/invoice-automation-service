@@ -9,11 +9,37 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+server:
+  shutdown: graceful
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  info:
+    env:
+      enabled: true
+info:
+  app:
+    name: ${spring.application.name}
+    description: Conversational invoicing SaaS
+    version: "@project.version@"
+jwt:
+  secret: ${JWT_SECRET:local-development-jwt-secret-change-me}
+  expiration: ${JWT_EXPIRATION_MS:259200000}
+logging:
+  pattern:
+    level: "%5p [correlationId:%X{correlationId:-none}]"
 billing:
   provider: ${BILLING_PROVIDER:mock}
 recipient:

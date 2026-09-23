@@ -75,7 +75,8 @@ class CreateInvoiceDraftServiceTest {
     issuancePersistenceService = mock(InvoiceIssuancePersistenceService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
     billingSubmissionService = new BillingSubmissionService(
-        billingProvider, issuancePersistenceService, clock);
+        billingProvider, issuancePersistenceService, clock,
+        new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     electronicDocumentRepository = mock(ElectronicDocumentRepository.class);
     service = new InvoiceDraftService(
             draftRepository, companyRepository, mapper, accessService,

@@ -15,6 +15,8 @@ import java.math.RoundingMode;
 import com.invoiceautomationservice.domain.model.TaxAffectation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 
 @Service
 @RequiredArgsConstructor
@@ -23,8 +25,10 @@ public class BillingSubmissionService {
   private final BillingProvider billingProvider;
   private final InvoiceIssuancePersistenceService persistenceService;
   private final Clock clock;
+  private final MeterRegistry meterRegistry;
 
   public ElectronicDocument submit(ElectronicDocument document) {
+    Timer.Sample sample = Timer.start(meterRegistry);
     BillingSubmission submission = toSubmission(document);
     BillingResult result;
     try {
@@ -35,7 +39,13 @@ public class BillingSubmissionService {
           null, ElectronicDocumentStatus.ERROR, failedAt, failedAt,
           "PROVIDER_CALL_FAILED", providerFailureMessage(exception));
     }
-    return persistenceService.complete(document.id(), document.submittedAt(), result);
+    ElectronicDocument completed = persistenceService.complete(
+        document.id(), document.submittedAt(), result);
+    meterRegistry.counter("billing.submissions", "document.type",
+        document.documentType().name(), "result", result.status().name()).increment();
+    sample.stop(meterRegistry.timer("billing.submission.duration", "document.type",
+        document.documentType().name(), "result", result.status().name()));
+    return completed;
   }
 
   BillingSubmission toSubmission(ElectronicDocument document) {

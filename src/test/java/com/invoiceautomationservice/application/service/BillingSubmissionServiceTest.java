@@ -44,7 +44,7 @@ class BillingSubmissionServiceTest {
             "Lima", "customer@test.pe"));
     BillingSubmissionService service = new BillingSubmissionService(
         mock(BillingProvider.class), mock(InvoiceIssuancePersistenceService.class),
-        Clock.systemUTC());
+        Clock.systemUTC(), new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
 
     var submission = service.toSubmission(document);
 

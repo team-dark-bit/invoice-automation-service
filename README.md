@@ -236,6 +236,21 @@ Los permisos se verifican en la capa de aplicación además de validar la perten
 
 La administración utiliza `POST/GET /api/v1/companies/{companyId}/members`, `POST /api/v1/companies/{companyId}/members/existing`, `PATCH /api/v1/companies/{companyId}/members/{userId}` y `DELETE /api/v1/companies/{companyId}/members/{userId}`. Un usuario existente puede asociarse a varias empresas sin duplicar sus credenciales. Las altas reciben una contraseña inicial cifrada con BCrypt; las respuestas nunca exponen credenciales ni hashes. La migración `V20__add_company_roles_and_permissions.sql` actualiza las membresías existentes como `OWNER` y crea el rol global mínimo `ROLE_USER` para autenticación JWT.
 
+### Conversation y Message
+
+`Conversation` representa el hilo de comunicación de una empresa y puede vincularse opcionalmente con un cliente y un `InvoiceDraft`. Conserva el canal (`REST`, `WHATSAPP`, `WEB` o `INTERNAL`), el identificador externo del participante, estado `OPEN`/`CLOSED` y fechas de actividad. Las referencias a cliente y borrador se validan dentro de la misma empresa.
+
+`Message` conserva dirección (`INBOUND`, `OUTBOUND`, `SYSTEM`), tipo (`TEXT`, `IMAGE`, `DOCUMENT`, `SYSTEM`), contenido o URL del medio, identificador externo, estado de entrega y fecha UTC. Una conversación cerrada no acepta mensajes. Las escrituras bloquean la conversación para evitar que un cierre y un mensaje concurrentes dejen un estado inconsistente.
+
+Los endpoints disponibles son:
+
+- `POST /api/v1/conversations` y `GET /api/v1/conversations` para crear y buscar conversaciones.
+- `GET /api/v1/conversations/{id}` para consultar una conversación.
+- `POST /api/v1/conversations/{id}/messages` y `GET /api/v1/conversations/{id}/messages` para agregar y paginar mensajes en orden cronológico.
+- `POST /api/v1/conversations/{id}/close` para cerrar el hilo.
+
+El acceso usa `CONVERSATION_READ` y `CONVERSATION_MANAGE`: `OWNER` y `ADMIN` poseen ambos; `BILLING` puede operar conversaciones; `VIEWER` solo consultarlas. La migración `V21__create_conversations_and_messages.sql` crea las tablas, claves foráneas, restricciones, índices y protección contra mensajes externos duplicados dentro de una conversación. En este punto solo existe el modelo y su API; la interpretación conversacional independiente del canal corresponde al punto 12.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

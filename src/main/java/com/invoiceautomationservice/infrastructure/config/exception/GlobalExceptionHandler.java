@@ -39,4 +39,18 @@ public class GlobalExceptionHandler {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+      ApiResponse<Void> response = ApiResponse.failure(
+          HttpStatus.BAD_REQUEST.value(), "Invalid request", List.of(ex.getMessage()));
+      return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
+      ApiResponse<Void> response = ApiResponse.failure(
+          HttpStatus.CONFLICT.value(), "Invalid state", List.of(ex.getMessage()));
+      return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
 }

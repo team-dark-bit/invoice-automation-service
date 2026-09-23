@@ -837,6 +837,46 @@
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
         }
       ]
+    },
+    {
+      "name": "Conversations and Messages",
+      "item": [
+        {
+          "name": "Create REST conversation",
+          "request": {
+            "method":"POST",
+            "header":[{"key":"Content-Type","value":"application/json"},{"key":"X-Company-Id","value":"{{companyId}}"}],
+            "body":{"mode":"raw","raw":"{\n  \"customerId\": null,\n  \"invoiceDraftId\": null,\n  \"channel\": \"REST\",\n  \"externalParticipantId\": \"postman-contact\"\n}","options":{"raw":{"language":"json"}}},
+            "url":{"raw":"{{baseUrl}}/api/v1/conversations","host":["{{baseUrl}}"],"path":["api","v1","conversations"]}
+          },
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.environment.set('conversationId', pm.response.json().data.id);"]}}]
+        },
+        {
+          "name": "Add inbound text message",
+          "request": {
+            "method":"POST",
+            "header":[{"key":"Content-Type","value":"application/json"}],
+            "body":{"mode":"raw","raw":"{\n  \"direction\": \"INBOUND\",\n  \"type\": \"TEXT\",\n  \"content\": \"Quiero emitir una boleta\",\n  \"mediaUrl\": null,\n  \"externalMessageId\": \"postman-message-1\",\n  \"status\": \"RECEIVED\"\n}","options":{"raw":{"language":"json"}}},
+            "url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/messages","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","messages"]}
+          },
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","pm.test('Message belongs to conversation', () => pm.expect(pm.response.json().data.conversationId).to.eql(pm.environment.get('conversationId')));"]}}]
+        },
+        {
+          "name": "List conversation messages",
+          "request":{"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/messages?page=0&size=50","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","messages"],"query":[{"key":"page","value":"0"},{"key":"size","value":"50"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns message page', () => pm.expect(pm.response.json().data.content).to.be.an('array'));"]}}]
+        },
+        {
+          "name": "Search open conversations",
+          "request":{"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/api/v1/conversations?status=OPEN&page=0&size=20","host":["{{baseUrl}}"],"path":["api","v1","conversations"],"query":[{"key":"status","value":"OPEN"},{"key":"page","value":"0"},{"key":"size","value":"20"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Close conversation",
+          "request":{"method":"POST","header":[],"url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/close","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","close"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Conversation is closed', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"]}}]
+        }
+      ]
     }
   ]
 }

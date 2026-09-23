@@ -10,10 +10,11 @@ public enum CompanyRole {
       CompanyPermission.COMPANY_READ, CompanyPermission.CUSTOMER_MANAGE,
       CompanyPermission.DRAFT_READ, CompanyPermission.DRAFT_MANAGE,
       CompanyPermission.DOCUMENT_READ, CompanyPermission.DOCUMENT_ISSUE,
-      CompanyPermission.DOCUMENT_ADJUST)),
+      CompanyPermission.DOCUMENT_ADJUST, CompanyPermission.CONVERSATION_READ,
+      CompanyPermission.CONVERSATION_MANAGE)),
   VIEWER(EnumSet.of(
       CompanyPermission.COMPANY_READ, CompanyPermission.DRAFT_READ,
-      CompanyPermission.DOCUMENT_READ));
+      CompanyPermission.DOCUMENT_READ, CompanyPermission.CONVERSATION_READ));
 
   private final Set<CompanyPermission> permissions;
 

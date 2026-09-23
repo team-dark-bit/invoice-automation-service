@@ -1,0 +1,10 @@
+package com.invoiceautomationservice.application.dto.request;
+
+import com.invoiceautomationservice.domain.model.CompanyRole;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+public record AddExistingCompanyMemberRequest(
+    @NotBlank String username,
+    @NotNull CompanyRole role
+) {}

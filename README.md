@@ -221,6 +221,21 @@ Las operaciones de negocio dejan una bitácora inmutable y separada de las entid
 
 La migración `V19__create_audit_events.sql` crea los índices de consulta y un trigger que rechaza cualquier `UPDATE` o `DELETE`, haciendo que la bitácora sea append-only incluso ante un acceso accidental desde la aplicación.
 
+### Onboarding, roles y permisos
+
+`POST /api/v1/onboarding` es el único registro público: crea de forma atómica el usuario propietario, su primera empresa y la membresía `OWNER`. Después de autenticarse, el propietario continúa con el perfil tributario y las series. El antiguo registro genérico `/api/auth/register` fue retirado para impedir usuarios sin empresa ni permisos definidos.
+
+Los roles son por empresa, de modo que el mismo usuario puede tener responsabilidades diferentes en cada negocio:
+
+- `OWNER`: control total, incluyendo propietarios y administradores.
+- `ADMIN`: administración operativa y de miembros, pero no puede administrar membresías `OWNER`.
+- `BILLING`: clientes, borradores, emisión, consulta y notas.
+- `VIEWER`: consulta de empresas, borradores y comprobantes.
+
+Los permisos se verifican en la capa de aplicación además de validar la pertenencia a la empresa. Una membresía puede desactivarse sin deshabilitar al usuario en sus otras empresas y nunca se permite retirar o desactivar al último propietario activo.
+
+La administración utiliza `POST/GET /api/v1/companies/{companyId}/members`, `POST /api/v1/companies/{companyId}/members/existing`, `PATCH /api/v1/companies/{companyId}/members/{userId}` y `DELETE /api/v1/companies/{companyId}/members/{userId}`. Un usuario existente puede asociarse a varias empresas sin duplicar sus credenciales. Las altas reciben una contraseña inicial cifrada con BCrypt; las respuestas nunca exponen credenciales ni hashes. La migración `V20__add_company_roles_and_permissions.sql` actualiza las membresías existentes como `OWNER` y crea el rol global mínimo `ROLE_USER` para autenticación JWT.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

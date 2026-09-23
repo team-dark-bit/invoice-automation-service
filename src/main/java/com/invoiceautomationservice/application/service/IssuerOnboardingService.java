@@ -8,6 +8,7 @@ import com.invoiceautomationservice.application.port.out.IssuerTaxProfileReposit
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -32,6 +33,7 @@ public class IssuerOnboardingService implements IssuerOnboardingUseCase {
   public IssuerTaxProfileResponse configure(
       String companyId, ConfigureIssuerTaxProfileRequest request) {
     companyAccessService.requireAccess(companyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.ONBOARDING_MANAGE);
     Company company = companyRepository.findById(companyId);
     if (company.getTaxId() == null || !company.getTaxId().matches("\\d{11}")) {
       throw new ApplicationException(INVALID_ISSUER_RUC, companyId);

@@ -7,6 +7,8 @@ import com.invoiceautomationservice.application.port.out.CurrentUserProvider;
 import com.invoiceautomationservice.application.port.out.UserCompanyRepository;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
+import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.COMPANY_PERMISSION_DENIED;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +28,19 @@ public class CompanyAccessService {
       // Return the same response as a missing company to avoid leaking another tenant's identifiers.
       throw new ApplicationException(COMPANY_NOT_FOUND, companyId);
     }
+  }
+
+  public void requirePermission(String companyId, CompanyPermission permission) {
+    var role = userCompanyRepository.findRole(currentUserProvider.username(), companyId)
+        .orElseThrow(() -> new ApplicationException(COMPANY_NOT_FOUND, companyId));
+    if (!role.grants(permission)) {
+      throw new ApplicationException(COMPANY_PERMISSION_DENIED, permission, companyId);
+    }
+  }
+
+  public com.invoiceautomationservice.domain.model.CompanyRole currentRole(String companyId) {
+    return userCompanyRepository.findRole(currentUserProvider.username(), companyId)
+        .orElseThrow(() -> new ApplicationException(COMPANY_NOT_FOUND, companyId));
   }
 
   public List<String> currentCompanyIds() {

@@ -8,6 +8,7 @@ import com.invoiceautomationservice.application.port.out.DocumentSeriesRepositor
 import com.invoiceautomationservice.domain.model.DocumentSeries;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +28,7 @@ public class DocumentSeriesService {
   public DocumentSeriesResponse configure(
       String companyId, ConfigureDocumentSeriesRequest request) {
     companyAccessService.requireAccess(companyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.ONBOARDING_MANAGE);
     validatePrefix(request.documentType(), request.series());
     DocumentSeries saved = repository.save(new DocumentSeries(
         UUID.randomUUID().toString(), companyId, request.documentType(), request.series(), 0, true));

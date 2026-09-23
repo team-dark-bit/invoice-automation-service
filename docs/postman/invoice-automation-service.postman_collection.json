@@ -791,6 +791,52 @@
           "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
         }
       ]
+    },
+    {
+      "name": "Onboarding and Company Members",
+      "item": [
+        {
+          "name": "Public owner onboarding",
+          "request": {
+            "method": "POST",
+            "header": [{"key":"Content-Type","value":"application/json"}],
+            "body": {"mode":"raw","raw":"{\n  \"fullName\": \"New Owner\",\n  \"username\": \"newowner\",\n  \"email\": \"newowner@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"company\": {\n    \"legalName\": \"New Company SAC\",\n    \"tradeName\": \"New Company\",\n    \"taxId\": \"20123456789\",\n    \"address\": \"Lima\"\n  }\n}","options":{"raw":{"language":"json"}}},
+            "url": {"raw":"{{baseUrl}}/api/v1/onboarding","host":["{{baseUrl}}"],"path":["api","v1","onboarding"]},
+            "description": "Registro público inicial. Use credenciales únicas o cambie el ejemplo antes de ejecutar."
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));"]}}]
+        },
+        {
+          "name": "Add billing member",
+          "request": {
+            "method":"POST",
+            "header":[{"key":"Content-Type","value":"application/json"}],
+            "body":{"mode":"raw","raw":"{\"fullName\":\"Billing Operator\",\"username\":\"billing.operator\",\"email\":\"billing@example.com\",\"password\":\"ChangeMe123!\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},
+            "url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members"]}
+          },
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.environment.set('memberUserId', pm.response.json().data.userId);"]}}]
+        },
+        {
+          "name": "List company members",
+          "request":{"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Associate existing user",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"username\":\"existing.user\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members/existing","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members","existing"]},"description":"Asocia a esta empresa un usuario que ya se registró en otra empresa."},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201 or expected validation error', () => pm.expect([201,404,409]).to.include(pm.response.code));"]}}]
+        },
+        {
+          "name": "List company members (after association)",
+          "request":{"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Change member role",
+          "request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"role\":\"VIEWER\",\"enabled\":true}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members/{{memberUserId}}","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members","{{memberUserId}}"]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
     }
   ]
 }

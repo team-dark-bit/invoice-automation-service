@@ -7,6 +7,8 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repos
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import com.invoiceautomationservice.domain.model.CompanyRole;
+import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -20,20 +22,30 @@ public class UserCompanyPersistenceAdapter implements UserCompanyRepository {
   public void associate(String username, String companyId) {
     String userId = findUserId(username);
     if (!userCompanyRepository.existsByUserIdAndCompanyId(userId, companyId)) {
-      userCompanyRepository.save(new UserCompanyEntity(userId, companyId, Instant.now()));
+      userCompanyRepository.save(new UserCompanyEntity(
+          userId, companyId, Instant.now(), CompanyRole.OWNER));
     }
   }
 
   @Override
   public boolean hasAccess(String username, String companyId) {
-    return userCompanyRepository.existsByUserIdAndCompanyId(findUserId(username), companyId);
+    return userCompanyRepository.existsByUserIdAndCompanyIdAndActiveTrue(
+        findUserId(username), companyId);
   }
 
   @Override
   public List<String> findCompanyIds(String username) {
-    return userCompanyRepository.findAllByUserIdOrderByCreatedAtAsc(findUserId(username)).stream()
+    return userCompanyRepository.findAllByUserIdAndActiveTrueOrderByCreatedAtAsc(
+        findUserId(username)).stream()
         .map(UserCompanyEntity::getCompanyId)
         .toList();
+  }
+
+  @Override
+  public Optional<CompanyRole> findRole(String username, String companyId) {
+    return userCompanyRepository.findByUserIdAndCompanyId(findUserId(username), companyId)
+        .filter(UserCompanyEntity::isActive)
+        .map(UserCompanyEntity::getRole);
   }
 
   private String findUserId(String username) {

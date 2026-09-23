@@ -9,6 +9,9 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.invoiceautomationservice.domain.model.CompanyRole;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 
 @Getter
 @Setter
@@ -29,9 +32,18 @@ public class UserCompanyEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
-  public UserCompanyEntity(String userId, String companyId, Instant createdAt) {
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  private CompanyRole role;
+
+  @Column(nullable = false)
+  private boolean active;
+
+  public UserCompanyEntity(String userId, String companyId, Instant createdAt, CompanyRole role) {
     this.userId = userId;
     this.companyId = companyId;
     this.createdAt = createdAt;
+    this.role = role;
+    this.active = true;
   }
 }

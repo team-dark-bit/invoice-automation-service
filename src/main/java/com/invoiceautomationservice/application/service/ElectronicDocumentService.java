@@ -13,6 +13,7 @@ import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.CreditNoteReason;
 import com.invoiceautomationservice.domain.model.DebitNoteReason;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ElectronicDocumentService {
   public ElectronicDocumentResponse findById(UUID id) {
     ElectronicDocument document = repository.findById(id);
     companyAccessService.requireAccess(document.companyId());
+    companyAccessService.requirePermission(document.companyId(), CompanyPermission.DOCUMENT_READ);
     return toResponse(document);
   }
 
@@ -41,6 +43,7 @@ public class ElectronicDocumentService {
       String requestedCompanyId, ElectronicDocumentStatus status, String documentNumber,
       int page, int size) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.DOCUMENT_READ);
     return repository.search(companyId, status, documentNumber, new PageQuery(page, size))
         .map(this::toResponse);
   }
@@ -49,6 +52,7 @@ public class ElectronicDocumentService {
   public ElectronicDocumentResponse refreshStatus(UUID id) {
     ElectronicDocument document = repository.findById(id);
     companyAccessService.requireAccess(document.companyId());
+    companyAccessService.requirePermission(document.companyId(), CompanyPermission.DOCUMENT_READ);
     if (document.status() == ElectronicDocumentStatus.ACCEPTED
         || document.status() == ElectronicDocumentStatus.REJECTED) {
       return toResponse(document);

@@ -10,6 +10,7 @@ import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.dto.CustomerDomainResponseMapper;
 import java.util.List;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,7 @@ public class CustomerService implements CustomerUseCase {
   @Override
   public void create(CreateCustomerRequest createCustomerRequest, String requestedCompanyId) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.CUSTOMER_MANAGE);
     var customer = domainRequestMapper.fromRequest(createCustomerRequest);
     customer.setCompanyId(companyId);
     customerRepository.save(customer);
@@ -36,12 +38,14 @@ public class CustomerService implements CustomerUseCase {
   @Override
   public CustomerResponse findById(String customerId, String requestedCompanyId) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.COMPANY_READ);
     return domainResponseMapper.toResponse(customerRepository.findByIdAndCompanyId(customerId, companyId));
   }
 
   @Override
   public List<CustomerResponse> findAll(String requestedCompanyId) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.COMPANY_READ);
     return customerRepository.findAllByCompanyIdAndActiveTrue(companyId)
             .stream()
             .map(domainResponseMapper::toResponse)
@@ -52,6 +56,7 @@ public class CustomerService implements CustomerUseCase {
   public PageResponse<CustomerResponse> search(
       String requestedCompanyId, String query, Boolean active, int page, int size) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.COMPANY_READ);
     return customerRepository.search(companyId, query, active, new PageQuery(page, size))
         .map(domainResponseMapper::toResponse);
   }

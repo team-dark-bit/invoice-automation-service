@@ -27,6 +27,7 @@ import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -60,6 +61,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
       throw new IllegalArgumentException("credit and debit notes must reference an issued document");
     }
     companyAccessService.requireAccess(request.companyId());
+    companyAccessService.requirePermission(request.companyId(), CompanyPermission.DRAFT_MANAGE);
     Company company = companyRepository.findById(request.companyId());
     if (!company.isActive()) {
       throw new ApplicationException(COMPANY_INACTIVE, request.companyId());
@@ -98,6 +100,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   public InvoiceDraftResponse findById(UUID id) {
     InvoiceDraft draft = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(draft.companyId());
+    companyAccessService.requirePermission(draft.companyId(), CompanyPermission.DRAFT_READ);
     return responseMapper.toResponse(draft);
   }
 
@@ -107,6 +110,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
       String requestedCompanyId, InvoiceDraftStatus status, String recipientDocumentNumber,
       int page, int size) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.DRAFT_READ);
     return invoiceDraftRepository.search(
         companyId, status, recipientDocumentNumber, new PageQuery(page, size))
         .map(responseMapper::toResponse);
@@ -118,6 +122,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(id);
     companyAccessService.requireAccess(draft.companyId());
     draft.ensureEditable();
+    companyAccessService.requirePermission(draft.companyId(), CompanyPermission.DRAFT_MANAGE);
     if (!request.documentType().isPrimaryDocument()) {
       throw new IllegalArgumentException("credit and debit notes must reference an issued document");
     }
@@ -145,6 +150,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   public InvoiceDraftResponse approve(UUID id) {
     InvoiceDraft draft = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(draft.companyId());
+    companyAccessService.requirePermission(draft.companyId(), CompanyPermission.DRAFT_MANAGE);
     InvoiceDraft approved = draft.approve(Instant.now(clock));
     InvoiceDraft saved = invoiceDraftRepository.save(approved);
     auditTrailService.record(saved.companyId(), AuditAction.DRAFT_APPROVED, "INVOICE_DRAFT",
@@ -157,6 +163,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   public InvoiceDraftResponse cancel(UUID id) {
     InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(id);
     companyAccessService.requireAccess(draft.companyId());
+    companyAccessService.requirePermission(draft.companyId(), CompanyPermission.DRAFT_MANAGE);
     if (electronicDocumentRepository.findByDraftId(id).isPresent()) {
       throw new ApplicationException(INVOICE_DRAFT_ALREADY_NUMBERED, id);
     }

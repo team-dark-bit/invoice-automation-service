@@ -4,4 +4,5 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entit
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface JpaRoleRepository extends JpaRepository<RoleEntity, String> {
+  java.util.Optional<RoleEntity> findByName(String name);
 }

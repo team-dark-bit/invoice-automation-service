@@ -7,6 +7,7 @@ import com.invoiceautomationservice.application.port.out.AuditEventRepository;
 import com.invoiceautomationservice.application.port.out.CurrentUserProvider;
 import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.domain.model.AuditEvent;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
@@ -31,11 +32,20 @@ public class AuditTrailService {
         String.valueOf(resourceId), outcome, detail, Instant.now(clock)));
   }
 
+  @Transactional
+  public void recordAs(String username, String companyId, AuditAction action,
+      String resourceType, Object resourceId, String outcome, String detail) {
+    repository.save(new AuditEvent(
+        UUID.randomUUID(), companyId, username, action, resourceType, String.valueOf(resourceId),
+        outcome, detail, Instant.now(clock)));
+  }
+
   @Transactional(readOnly = true)
   public PageResponse<AuditEventResponse> search(
       String requestedCompanyId, AuditAction action, String resourceType, String resourceId,
       Instant from, Instant to, int page, int size) {
     String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.AUDIT_READ);
     if (from != null && to != null && from.isAfter(to)) {
       throw new IllegalArgumentException("from must be before or equal to to");
     }

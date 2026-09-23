@@ -16,6 +16,7 @@ import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.domain.model.IssuerSnapshot;
 import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
 import com.invoiceautomationservice.domain.model.RecipientSnapshot;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import java.util.UUID;
 import java.time.Clock;
 import java.time.Duration;
@@ -44,6 +45,7 @@ public class InvoiceIssuancePersistenceService {
   public PreparedEmission prepare(UUID draftId) {
     InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(draftId);
     companyAccessService.requireAccess(draft.companyId());
+    companyAccessService.requirePermission(draft.companyId(), CompanyPermission.DOCUMENT_ISSUE);
     var existing = electronicDocumentRepository.findByDraftId(draftId);
     if (existing.isPresent()) {
       return new PreparedEmission(existing.get(), false);
@@ -65,6 +67,7 @@ public class InvoiceIssuancePersistenceService {
   public PreparedEmission prepareRetry(UUID documentId) {
     ElectronicDocument document = electronicDocumentRepository.findByIdForUpdate(documentId);
     companyAccessService.requireAccess(document.companyId());
+    companyAccessService.requirePermission(document.companyId(), CompanyPermission.DOCUMENT_ISSUE);
     Instant now = Instant.now(clock);
     boolean staleSubmission = document.status() == ElectronicDocumentStatus.SENDING
         && document.submittedAt() != null
@@ -87,6 +90,7 @@ public class InvoiceIssuancePersistenceService {
       String reasonCode, String reason) {
     ElectronicDocument original = electronicDocumentRepository.findByIdForUpdate(originalId);
     companyAccessService.requireAccess(original.companyId());
+    companyAccessService.requirePermission(original.companyId(), CompanyPermission.DOCUMENT_ADJUST);
     var existing = electronicDocumentRepository.findAdjustment(originalId, noteType, reasonCode);
     if (existing.isPresent()) return new PreparedEmission(existing.get(), false);
     if (original.status() != ElectronicDocumentStatus.ACCEPTED

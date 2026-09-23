@@ -4,10 +4,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
+import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
@@ -71,6 +73,30 @@ class InvoiceDraftControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.message").value("Invoice draft approved"))
             .andExpect(jsonPath("$.data.status").value("APPROVED"));
+  }
+
+  @Test
+  void updatesDraft() throws Exception {
+    when(useCase.update(org.mockito.ArgumentMatchers.eq(DRAFT_ID),
+        any(UpdateInvoiceDraftRequest.class))).thenReturn(response());
+
+    mockMvc.perform(put("/api/v1/invoice-drafts/{id}", DRAFT_ID)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(validUpdateRequest()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Invoice draft updated"))
+        .andExpect(jsonPath("$.data.status").value("DRAFT"));
+  }
+
+  @Test
+  void cancelsDraft() throws Exception {
+    when(useCase.cancel(DRAFT_ID)).thenReturn(
+        withStatus(InvoiceDraftStatus.CANCELLED, null, null));
+
+    mockMvc.perform(post("/api/v1/invoice-drafts/{id}/cancel", DRAFT_ID))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.message").value("Invoice draft cancelled"))
+        .andExpect(jsonPath("$.data.status").value("CANCELLED"));
   }
 
   @Test
@@ -159,6 +185,15 @@ class InvoiceDraftControllerTest {
             base.recipientDocumentType(), base.recipientDocumentNumber(), base.currency(), status, base.items(),
             base.subtotal(), base.total(), base.createdAt(), base.updatedAt(), providerReference, issuedAt
     );
+  }
+
+  private String validUpdateRequest() {
+    return """
+        {"documentType":"SALES_RECEIPT","recipientDocumentType":"DNI",
+         "recipientDocumentNumber":"12345678","currency":"PEN",
+         "items":[{"description":"Updated consulting","unitCode":"NIU","quantity":1,
+         "unitPrice":100,"discount":0,"taxAffectation":"TAXED"}]}
+        """;
   }
 
   private ElectronicDocumentResponse electronicDocument() {

@@ -62,6 +62,28 @@ class InvoiceDraftPersistenceAdapterTest {
   }
 
   @Test
+  void removesItemsThatWereReplacedDuringDraftEdition() {
+    InvoiceDraft draft = draft();
+    InvoiceDraftEntity draftDao = draftDao(draft);
+    InvoiceItemEntity newItem = itemDao(draft.items().getFirst(), draft.id());
+    InvoiceItemEntity obsoleteItem = itemDao(
+        InvoiceItem.create("Old item", BigDecimal.ONE, BigDecimal.ONE), draft.id());
+    when(draftMapper.toDao(draft)).thenReturn(draftDao);
+    when(draftRepository.save(draftDao)).thenReturn(draftDao);
+    when(itemRepository.findAllByInvoiceDraftIdOrderByPosition(draft.id()))
+        .thenReturn(List.of(obsoleteItem));
+    when(itemMapper.toDao(draft.items().getFirst(), draft.id(), 0)).thenReturn(newItem);
+    when(itemRepository.saveAll(anyList())).thenReturn(List.of(newItem));
+    when(itemMapper.toDomain(newItem)).thenReturn(draft.items().getFirst());
+
+    adapter.save(draft);
+
+    verify(itemRepository).deleteAll(List.of(obsoleteItem));
+    verify(itemRepository).flush();
+    verify(itemRepository).saveAll(List.of(newItem));
+  }
+
+  @Test
   void loadsDraftWithItsItems() {
     InvoiceDraft draft = draft();
     InvoiceDraftEntity draftDao = draftDao(draft);

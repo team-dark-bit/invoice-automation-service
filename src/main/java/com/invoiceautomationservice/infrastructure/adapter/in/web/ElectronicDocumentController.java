@@ -31,4 +31,11 @@ public class ElectronicDocumentController {
     return ResponseEntity.ok(ApiResponse.success(
         200, "Electronic document status refreshed", document));
   }
+
+  @PostMapping("/{id}/retry")
+  public ResponseEntity<ApiResponse<ElectronicDocumentResponse>> retry(@PathVariable UUID id) {
+    ElectronicDocumentResponse document = service.retry(id);
+    return ResponseEntity.ok(ApiResponse.success(
+        200, "Electronic document submission retried", document));
+  }
 }

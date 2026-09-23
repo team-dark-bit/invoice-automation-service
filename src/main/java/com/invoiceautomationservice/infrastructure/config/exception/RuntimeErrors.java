@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
+import static org.springframework.http.HttpStatus.CONFLICT;
 
 @RequiredArgsConstructor
 public enum RuntimeErrors implements ApplicationError {
@@ -30,7 +31,11 @@ public enum RuntimeErrors implements ApplicationError {
     DOCUMENT_SERIES_NOT_FOUND(NOT_FOUND,
             "No active series exists for document type %s and company %s"),
     ELECTRONIC_DOCUMENT_NOT_FOUND(NOT_FOUND,
-            "The electronic document with id: %s does not exist");
+            "The electronic document with id: %s does not exist"),
+    ELECTRONIC_DOCUMENT_NOT_RETRYABLE(CONFLICT,
+            "The electronic document with id: %s cannot be retried from status %s"),
+    INVOICE_DRAFT_ALREADY_NUMBERED(CONFLICT,
+            "The invoice draft with id: %s already has a numbered electronic document");
 
     private final HttpStatus status;
     private final String message;

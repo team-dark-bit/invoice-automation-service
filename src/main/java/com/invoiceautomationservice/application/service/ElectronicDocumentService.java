@@ -19,6 +19,8 @@ public class ElectronicDocumentService {
   private final ElectronicDocumentRepository repository;
   private final CompanyAccessService companyAccessService;
   private final BillingProvider billingProvider;
+  private final InvoiceIssuancePersistenceService issuancePersistenceService;
+  private final BillingSubmissionService billingSubmissionService;
 
   @Transactional(readOnly = true)
   public ElectronicDocumentResponse findById(UUID id) {
@@ -41,6 +43,12 @@ public class ElectronicDocumentService {
     ElectronicDocument updated = document.withBillingResult(
         billingProvider.checkStatus(document.providerReference()));
     return toResponse(repository.save(updated));
+  }
+
+  public ElectronicDocumentResponse retry(UUID id) {
+    PreparedEmission prepared = issuancePersistenceService.prepareRetry(id);
+    ElectronicDocument completed = billingSubmissionService.submit(prepared.document());
+    return toResponse(completed);
   }
 
   public ElectronicDocumentResponse toResponse(ElectronicDocument document) {

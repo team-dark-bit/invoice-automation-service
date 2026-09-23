@@ -17,6 +17,9 @@ import com.invoiceautomationservice.domain.model.IssuerSnapshot;
 import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
 import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import java.util.UUID;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -26,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class InvoiceIssuancePersistenceService {
 
+  private static final Duration STALE_SUBMISSION_TIMEOUT = Duration.ofMinutes(5);
+
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final ElectronicDocumentRepository electronicDocumentRepository;
   private final DocumentSeriesRepository documentSeriesRepository;
@@ -33,6 +38,7 @@ public class InvoiceIssuancePersistenceService {
   private final CustomerRepository customerRepository;
   private final IssuerTaxProfileRepository issuerTaxProfileRepository;
   private final CompanyAccessService companyAccessService;
+  private final Clock clock;
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public PreparedEmission prepare(UUID draftId) {
@@ -50,15 +56,41 @@ public class InvoiceIssuancePersistenceService {
         draft.customerId(), draft.companyId());
     IssuerTaxProfile profile = issuerTaxProfileRepository.findByCompanyId(draft.companyId());
     ElectronicDocument document = ElectronicDocument.from(
-        draft, number, toIssuerSnapshot(company, profile), toRecipientSnapshot(draft, customer));
+        draft, number, toIssuerSnapshot(company, profile), toRecipientSnapshot(draft, customer))
+        .startSubmission(Instant.now(clock));
     return new PreparedEmission(electronicDocumentRepository.save(document), true);
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public ElectronicDocument complete(UUID documentId, BillingResult result) {
+  public PreparedEmission prepareRetry(UUID documentId) {
+    ElectronicDocument document = electronicDocumentRepository.findByIdForUpdate(documentId);
+    companyAccessService.requireAccess(document.companyId());
+    Instant now = Instant.now(clock);
+    boolean staleSubmission = document.status() == ElectronicDocumentStatus.SENDING
+        && document.submittedAt() != null
+        && !document.submittedAt().plus(STALE_SUBMISSION_TIMEOUT).isAfter(now);
+    if (document.status() != ElectronicDocumentStatus.PENDING_SEND
+        && document.status() != ElectronicDocumentStatus.ERROR
+        && !staleSubmission) {
+      throw new com.invoiceautomationservice.infrastructure.config.exception.ApplicationException(
+          com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors
+              .ELECTRONIC_DOCUMENT_NOT_RETRYABLE,
+          document.id(), document.status());
+    }
+    return new PreparedEmission(
+        electronicDocumentRepository.save(document.startSubmission(now)), true);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public ElectronicDocument complete(
+      UUID documentId, Instant attemptStartedAt, BillingResult result) {
     ElectronicDocument document = electronicDocumentRepository.findByIdForUpdate(documentId);
     if (document.status() == ElectronicDocumentStatus.ACCEPTED
         || document.status() == ElectronicDocumentStatus.REJECTED) {
+      return document;
+    }
+    if (document.status() != ElectronicDocumentStatus.SENDING
+        || !attemptStartedAt.equals(document.submittedAt())) {
       return document;
     }
     ElectronicDocument saved = electronicDocumentRepository.save(

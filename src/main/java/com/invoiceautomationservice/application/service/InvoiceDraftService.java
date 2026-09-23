@@ -4,28 +4,25 @@ import static com.invoiceautomationservice.infrastructure.config.exception.Runti
 import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.CUSTOMER_INACTIVE;
 import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.ISSUER_ONBOARDING_REQUIRED;
 import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.INVOICE_REQUIRES_RUC;
+import static com.invoiceautomationservice.infrastructure.config.exception.RuntimeErrors.INVOICE_DRAFT_ALREADY_NUMBERED;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
+import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
+import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
-import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
+import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
-import com.invoiceautomationservice.domain.model.BillingResult;
-import com.invoiceautomationservice.domain.model.BillingSubmission;
 import com.invoiceautomationservice.domain.model.Customer;
 import com.invoiceautomationservice.domain.model.InvoiceDraft;
 import com.invoiceautomationservice.domain.model.InvoiceItem;
-import com.invoiceautomationservice.domain.model.ElectronicDocument;
-import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
-import com.invoiceautomationservice.domain.model.IssuerSnapshot;
-import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,13 +38,14 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   private final InvoiceDraftRepository invoiceDraftRepository;
   private final CompanyRepository companyRepository;
-  private final BillingProvider billingProvider;
   private final InvoiceDraftDomainResponseMapper responseMapper;
   private final CompanyAccessService companyAccessService;
   private final IssuerTaxProfileRepository issuerTaxProfileRepository;
   private final RecipientResolutionService recipientResolutionService;
   private final ElectronicDocumentService electronicDocumentService;
   private final InvoiceIssuancePersistenceService issuancePersistenceService;
+  private final BillingSubmissionService billingSubmissionService;
+  private final ElectronicDocumentRepository electronicDocumentRepository;
   private final Clock clock;
 
   @Override
@@ -94,11 +92,45 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
 
   @Override
   @Transactional
+  public InvoiceDraftResponse update(UUID id, UpdateInvoiceDraftRequest request) {
+    InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(id);
+    companyAccessService.requireAccess(draft.companyId());
+    draft.ensureEditable();
+    if (request.documentType() == InvoiceDocumentType.INVOICE
+        && request.recipientDocumentType() != IdentityDocumentType.RUC) {
+      throw new ApplicationException(INVOICE_REQUIRES_RUC);
+    }
+    Customer customer = recipientResolutionService.resolve(
+        draft.companyId(), request.recipientDocumentType(), request.recipientDocumentNumber());
+    if (!customer.isActive()) {
+      throw new ApplicationException(CUSTOMER_INACTIVE, customer.getId());
+    }
+    InvoiceDraft updated = draft.update(
+        customer.getId(), request.documentType(), request.recipientDocumentType(),
+        request.recipientDocumentNumber(), request.currency(), toItems(request.items()),
+        Instant.now(clock));
+    return responseMapper.toResponse(invoiceDraftRepository.save(updated));
+  }
+
+  @Override
+  @Transactional
   public InvoiceDraftResponse approve(UUID id) {
     InvoiceDraft draft = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(draft.companyId());
     InvoiceDraft approved = draft.approve(Instant.now(clock));
     return responseMapper.toResponse(invoiceDraftRepository.save(approved));
+  }
+
+  @Override
+  @Transactional
+  public InvoiceDraftResponse cancel(UUID id) {
+    InvoiceDraft draft = invoiceDraftRepository.findByIdForUpdate(id);
+    companyAccessService.requireAccess(draft.companyId());
+    if (electronicDocumentRepository.findByDraftId(id).isPresent()) {
+      throw new ApplicationException(INVOICE_DRAFT_ALREADY_NUMBERED, id);
+    }
+    InvoiceDraft cancelled = draft.cancel(Instant.now(clock));
+    return responseMapper.toResponse(invoiceDraftRepository.save(cancelled));
   }
 
   @Override
@@ -108,48 +140,15 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
       return electronicDocumentService.toResponse(prepared.document());
     }
 
-    BillingResult result;
-    try {
-      result = billingProvider.submit(toBillingSubmission(prepared.document()));
-    } catch (RuntimeException exception) {
-      Instant failedAt = Instant.now(clock);
-      result = new BillingResult(
-          null, ElectronicDocumentStatus.ERROR,
-          failedAt, failedAt, "PROVIDER_CALL_FAILED", providerFailureMessage(exception));
-    }
-    ElectronicDocument completed = issuancePersistenceService.complete(
-        prepared.document().id(), result);
+    var completed = billingSubmissionService.submit(prepared.document());
     return electronicDocumentService.toResponse(completed);
   }
 
-  private String providerFailureMessage(RuntimeException exception) {
-    String message = exception.getMessage();
-    String detail = message == null || message.isBlank()
-        ? exception.getClass().getSimpleName() : message;
-    return detail.length() <= 1000 ? detail : detail.substring(0, 1000);
-  }
-
-  private BillingSubmission toBillingSubmission(ElectronicDocument document) {
-    IssuerSnapshot snapshot = document.issuer();
-    BillingSubmission.Issuer issuer = new BillingSubmission.Issuer(
-        snapshot.taxId(), snapshot.legalName(), snapshot.tradeName(), snapshot.taxpayerType(),
-        snapshot.fiscalAddress(), snapshot.ubigeo(), snapshot.department(), snapshot.province(),
-        snapshot.district(), snapshot.countryCode());
-    RecipientSnapshot recipientSnapshot = document.recipient();
-    BillingSubmission.Recipient recipient = new BillingSubmission.Recipient(
-        recipientSnapshot.documentType(), recipientSnapshot.documentNumber(),
-        recipientSnapshot.name(), recipientSnapshot.address(), recipientSnapshot.email());
-    List<BillingSubmission.Item> providerItems = document.items().stream()
-        .map(item -> new BillingSubmission.Item(
-            item.description(), item.unitCode(), item.quantity(), item.unitPrice(), item.discount(),
-            item.taxAffectation(), item.taxRate(), item.grossAmount(), item.taxableAmount(),
-            item.taxAmount(), item.lineTotal()))
+  private List<InvoiceItem> toItems(List<CreateInvoiceItemRequest> items) {
+    return items.stream()
+        .map(item -> InvoiceItem.create(
+            item.description(), item.unitCode(), item.quantity(), item.unitPrice(),
+            item.discount(), item.taxAffectation()))
         .toList();
-    return new BillingSubmission(
-        document.id(), document.id().toString(), document.fullNumber(),
-        document.series(), document.correlative(),
-        document.documentType(), document.currency(),
-        issuer, recipient, providerItems, document.subtotal(), document.discountTotal(),
-        document.taxableTotal(), document.taxTotal(), document.total());
   }
 }

@@ -122,6 +122,53 @@ class InvoiceDraftTest {
             .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
   }
 
+  @Test
+  void editsDraftAndRecalculatesAllTotals() {
+    Instant modifiedAt = Instant.parse("2026-09-01T11:00:00Z");
+    InvoiceItem updatedItem = InvoiceItem.create(
+        "Updated service", UnitCode.NIU, new BigDecimal("2"), new BigDecimal("100"),
+        new BigDecimal("20"), TaxAffectation.TAXED);
+
+    InvoiceDraft updated = validDraft(Instant.parse("2026-09-01T10:00:00Z")).update(
+        "customer-2", InvoiceDocumentType.INVOICE, IdentityDocumentType.RUC,
+        "20123456789", "USD", List.of(updatedItem), modifiedAt);
+
+    assertThat(updated.id()).isNotNull();
+    assertThat(updated.customerId()).isEqualTo("customer-2");
+    assertThat(updated.documentType()).isEqualTo(InvoiceDocumentType.INVOICE);
+    assertThat(updated.currency()).isEqualTo("USD");
+    assertThat(updated.subtotal()).isEqualByComparingTo("200.00");
+    assertThat(updated.discountTotal()).isEqualByComparingTo("20.00");
+    assertThat(updated.taxTotal()).isEqualByComparingTo("32.40");
+    assertThat(updated.total()).isEqualByComparingTo("212.40");
+    assertThat(updated.updatedAt()).isEqualTo(modifiedAt);
+  }
+
+  @Test
+  void onlyDraftCanBeEdited() {
+    InvoiceDraft approved = validDraft(Instant.parse("2026-09-01T10:00:00Z"))
+        .approve(Instant.parse("2026-09-01T11:00:00Z"));
+
+    assertThatThrownBy(() -> approved.update(
+        "customer-2", InvoiceDocumentType.SALES_RECEIPT, IdentityDocumentType.DNI,
+        "87654321", "PEN", approved.items(), Instant.now()))
+        .isInstanceOf(com.invoiceautomationservice.domain.exception
+            .InvalidInvoiceDraftStateException.class);
+  }
+
+  @Test
+  void cancelsDraftOrApprovedDraftButNeverIssuedDraft() {
+    Instant now = Instant.parse("2026-09-01T12:00:00Z");
+    InvoiceDraft draft = validDraft(Instant.parse("2026-09-01T10:00:00Z"));
+    InvoiceDraft approved = draft.approve(Instant.parse("2026-09-01T11:00:00Z"));
+
+    assertThat(draft.cancel(now).status()).isEqualTo(InvoiceDraftStatus.CANCELLED);
+    assertThat(approved.cancel(now).status()).isEqualTo(InvoiceDraftStatus.CANCELLED);
+    assertThatThrownBy(() -> approved.markIssued("PROVIDER-1", now).cancel(now))
+        .isInstanceOf(com.invoiceautomationservice.domain.exception
+            .InvalidInvoiceDraftStateException.class);
+  }
+
   private InvoiceDraft validDraft(Instant createdAt) {
     return InvoiceDraft.create(
             "company-1", "customer-1", InvoiceDocumentType.SALES_RECEIPT,

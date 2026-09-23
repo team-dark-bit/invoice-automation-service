@@ -31,7 +31,8 @@ class ElectronicDocumentServiceTest {
     CompanyAccessService accessService = mock(CompanyAccessService.class);
     BillingProvider provider = mock(BillingProvider.class);
     ElectronicDocumentService service = new ElectronicDocumentService(
-        repository, accessService, provider);
+        repository, accessService, provider,
+        mock(InvoiceIssuancePersistenceService.class), mock(BillingSubmissionService.class));
     Instant submittedAt = Instant.parse("2026-09-20T10:00:00Z");
     ElectronicDocument sent = provisional().withBillingResult(new BillingResult(
         "PROVIDER-123", ElectronicDocumentStatus.SENT, submittedAt,
@@ -51,6 +52,33 @@ class ElectronicDocumentServiceTest {
     assertThat(response.providerResponseCode()).isEqualTo("0");
     verify(accessService).requireAccess("company-1");
     verify(provider).checkStatus("PROVIDER-123");
+  }
+
+  @Test
+  void retriesDocumentThroughSeparatedPersistenceAndProviderPhases() {
+    ElectronicDocumentRepository repository = mock(ElectronicDocumentRepository.class);
+    CompanyAccessService accessService = mock(CompanyAccessService.class);
+    BillingProvider provider = mock(BillingProvider.class);
+    InvoiceIssuancePersistenceService persistence =
+        mock(InvoiceIssuancePersistenceService.class);
+    BillingSubmissionService submission = mock(BillingSubmissionService.class);
+    ElectronicDocumentService service = new ElectronicDocumentService(
+        repository, accessService, provider, persistence, submission);
+    ElectronicDocument sending = provisional()
+        .startSubmission(Instant.parse("2026-09-20T10:00:00Z"));
+    ElectronicDocument accepted = sending.withBillingResult(new BillingResult(
+        "PROVIDER-123", ElectronicDocumentStatus.ACCEPTED,
+        Instant.parse("2026-09-20T10:00:00Z"),
+        Instant.parse("2026-09-20T10:00:01Z"), "0", "Accepted"));
+    when(persistence.prepareRetry(sending.id()))
+        .thenReturn(new PreparedEmission(sending, true));
+    when(submission.submit(sending)).thenReturn(accepted);
+
+    var response = service.retry(sending.id());
+
+    assertThat(response.status()).isEqualTo(ElectronicDocumentStatus.ACCEPTED);
+    verify(persistence).prepareRetry(sending.id());
+    verify(submission).submit(sending);
   }
 
   private ElectronicDocument provisional() {

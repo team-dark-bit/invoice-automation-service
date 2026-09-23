@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
+import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
@@ -17,6 +18,7 @@ import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
+import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
@@ -55,6 +57,8 @@ class CreateInvoiceDraftServiceTest {
   private CompanyAccessService accessService;
   private ElectronicDocumentService electronicDocumentService;
   private InvoiceIssuancePersistenceService issuancePersistenceService;
+  private BillingSubmissionService billingSubmissionService;
+  private ElectronicDocumentRepository electronicDocumentRepository;
 
   @BeforeEach
   void setUp() {
@@ -68,10 +72,14 @@ class CreateInvoiceDraftServiceTest {
     electronicDocumentService = mock(ElectronicDocumentService.class);
     issuancePersistenceService = mock(InvoiceIssuancePersistenceService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC);
+    billingSubmissionService = new BillingSubmissionService(
+        billingProvider, issuancePersistenceService, clock);
+    electronicDocumentRepository = mock(ElectronicDocumentRepository.class);
     service = new InvoiceDraftService(
-            draftRepository, companyRepository, billingProvider, mapper, accessService,
+            draftRepository, companyRepository, mapper, accessService,
             issuerTaxProfileRepository, recipientResolutionService, electronicDocumentService,
-            issuancePersistenceService, clock
+            issuancePersistenceService, billingSubmissionService, electronicDocumentRepository,
+            clock
     );
   }
 
@@ -152,12 +160,14 @@ class CreateInvoiceDraftServiceTest {
         "MOCK-" + approved.id(), ElectronicDocumentStatus.ACCEPTED,
         Instant.parse("2026-09-01T10:00:00Z"), Instant.parse("2026-09-01T10:00:00Z"),
         "0", "Accepted");
-    ElectronicDocument pending = electronicDocument(approved);
+    ElectronicDocument pending = electronicDocument(approved)
+        .startSubmission(Instant.parse("2026-09-01T10:00:00Z"));
     ElectronicDocument completed = pending.withBillingResult(billingResult);
     when(issuancePersistenceService.prepare(approved.id()))
         .thenReturn(new PreparedEmission(pending, true));
     when(billingProvider.submit(any(BillingSubmission.class))).thenReturn(billingResult);
-    when(issuancePersistenceService.complete(pending.id(), billingResult)).thenReturn(completed);
+    when(issuancePersistenceService.complete(
+        pending.id(), pending.submittedAt(), billingResult)).thenReturn(completed);
     ElectronicDocumentResponse documentResponse = mock(ElectronicDocumentResponse.class);
     when(electronicDocumentService.toResponse(any(ElectronicDocument.class))).thenReturn(documentResponse);
 
@@ -172,7 +182,8 @@ class CreateInvoiceDraftServiceTest {
     assertThat(submissionCaptor.getValue().recipient().address()).isEqualTo("Customer address");
     assertThat(submissionCaptor.getValue().idempotencyKey())
         .isEqualTo(submissionCaptor.getValue().documentId().toString());
-    verify(issuancePersistenceService).complete(pending.id(), billingResult);
+    verify(issuancePersistenceService).complete(
+        pending.id(), pending.submittedAt(), billingResult);
   }
 
   @Test
@@ -185,6 +196,61 @@ class CreateInvoiceDraftServiceTest {
     assertThatThrownBy(() -> service.issue(draft.id()))
             .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
     verifyNoInteractions(billingProvider);
+  }
+
+  @Test
+  void updatesDraftAndResolvesNewRecipient() {
+    InvoiceDraft draft = draft();
+    UpdateInvoiceDraftRequest request = new UpdateInvoiceDraftRequest(
+        InvoiceDocumentType.SALES_RECEIPT, IdentityDocumentType.DNI, "87654321", "USD",
+        List.of(new CreateInvoiceItemRequest(
+            "Updated service", new BigDecimal("2"), new BigDecimal("100"))));
+    Customer recipient = customer(true);
+    recipient.setId("customer-2");
+    when(draftRepository.findByIdForUpdate(draft.id())).thenReturn(draft);
+    when(recipientResolutionService.resolve("company-1", IdentityDocumentType.DNI, "87654321"))
+        .thenReturn(recipient);
+    when(draftRepository.save(any(InvoiceDraft.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(mapper.toResponse(any(InvoiceDraft.class)))
+        .thenAnswer(invocation -> response(invocation.getArgument(0)));
+
+    InvoiceDraftResponse result = service.update(draft.id(), request);
+
+    assertThat(result.customerId()).isEqualTo("customer-2");
+    assertThat(result.currency()).isEqualTo("USD");
+    assertThat(result.items()).extracting(InvoiceItemResponse::description)
+        .containsExactly("Updated service");
+    verify(accessService).requireAccess("company-1");
+  }
+
+  @Test
+  void cancelsApprovedDraftWhenItHasNotBeenNumbered() {
+    InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
+    when(draftRepository.findByIdForUpdate(approved.id())).thenReturn(approved);
+    when(electronicDocumentRepository.findByDraftId(approved.id()))
+        .thenReturn(java.util.Optional.empty());
+    when(draftRepository.save(any(InvoiceDraft.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(mapper.toResponse(any(InvoiceDraft.class)))
+        .thenAnswer(invocation -> response(invocation.getArgument(0)));
+
+    InvoiceDraftResponse result = service.cancel(approved.id());
+
+    assertThat(result.status()).isEqualTo(
+        com.invoiceautomationservice.domain.model.InvoiceDraftStatus.CANCELLED);
+  }
+
+  @Test
+  void rejectsCancellationAfterDocumentNumberWasAssigned() {
+    InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
+    when(draftRepository.findByIdForUpdate(approved.id())).thenReturn(approved);
+    when(electronicDocumentRepository.findByDraftId(approved.id()))
+        .thenReturn(java.util.Optional.of(electronicDocument(approved)));
+
+    assertThatThrownBy(() -> service.cancel(approved.id()))
+        .isInstanceOf(ApplicationException.class)
+        .hasMessageContaining("already has a numbered electronic document");
   }
 
   @Test
@@ -205,21 +271,24 @@ class CreateInvoiceDraftServiceTest {
   @Test
   void persistsErrorWhenProviderCallFails() {
     InvoiceDraft approved = draft().approve(Instant.parse("2026-09-01T09:00:00Z"));
-    ElectronicDocument pending = electronicDocument(approved);
+    ElectronicDocument pending = electronicDocument(approved)
+        .startSubmission(Instant.parse("2026-09-01T10:00:00Z"));
     ElectronicDocumentResponse response = mock(ElectronicDocumentResponse.class);
     when(issuancePersistenceService.prepare(approved.id()))
         .thenReturn(new PreparedEmission(pending, true));
     when(billingProvider.submit(any(BillingSubmission.class)))
         .thenThrow(new IllegalStateException("Provider unavailable"));
-    when(issuancePersistenceService.complete(any(UUID.class), any(BillingResult.class)))
-        .thenAnswer(invocation -> pending.withBillingResult(invocation.getArgument(1)));
+    when(issuancePersistenceService.complete(
+        any(UUID.class), any(Instant.class), any(BillingResult.class)))
+        .thenAnswer(invocation -> pending.withBillingResult(invocation.getArgument(2)));
     when(electronicDocumentService.toResponse(any(ElectronicDocument.class))).thenReturn(response);
 
     assertThat(service.issue(approved.id())).isSameAs(response);
 
     ArgumentCaptor<BillingResult> resultCaptor = ArgumentCaptor.forClass(BillingResult.class);
-    verify(issuancePersistenceService).complete(org.mockito.ArgumentMatchers.eq(pending.id()),
-        resultCaptor.capture());
+    verify(issuancePersistenceService).complete(
+        org.mockito.ArgumentMatchers.eq(pending.id()),
+        org.mockito.ArgumentMatchers.eq(pending.submittedAt()), resultCaptor.capture());
     assertThat(resultCaptor.getValue().status()).isEqualTo(ElectronicDocumentStatus.ERROR);
     assertThat(resultCaptor.getValue().responseCode()).isEqualTo("PROVIDER_CALL_FAILED");
     assertThat(resultCaptor.getValue().responseMessage()).isEqualTo("Provider unavailable");

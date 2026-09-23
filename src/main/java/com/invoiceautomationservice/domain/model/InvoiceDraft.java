@@ -112,6 +112,36 @@ public record InvoiceDraft(
     return copyWith(InvoiceDraftStatus.APPROVED, approvedAt, null, null);
   }
 
+  public InvoiceDraft update(
+      String newCustomerId,
+      InvoiceDocumentType newDocumentType,
+      IdentityDocumentType newRecipientDocumentType,
+      String newRecipientDocumentNumber,
+      String newCurrency,
+      List<InvoiceItem> newItems,
+      Instant modifiedAt) {
+    ensureEditable();
+    Totals totals = totalsOf(newItems);
+    return new InvoiceDraft(
+        id, companyId, newCustomerId, newDocumentType, newRecipientDocumentType,
+        newRecipientDocumentNumber, newCurrency, InvoiceDraftStatus.DRAFT, newItems,
+        totals.subtotal(), totals.discountTotal(), totals.taxableTotal(), totals.taxTotal(),
+        totals.total(), createdAt, modifiedAt, null, null);
+  }
+
+  public void ensureEditable() {
+    if (status != InvoiceDraftStatus.DRAFT) {
+      throw new InvalidInvoiceDraftStateException(status, InvoiceDraftStatus.DRAFT);
+    }
+  }
+
+  public InvoiceDraft cancel(Instant cancelledAt) {
+    if (status != InvoiceDraftStatus.DRAFT && status != InvoiceDraftStatus.APPROVED) {
+      throw new InvalidInvoiceDraftStateException(status, InvoiceDraftStatus.DRAFT);
+    }
+    return copyWith(InvoiceDraftStatus.CANCELLED, cancelledAt, null, null);
+  }
+
   public InvoiceDraft markIssued(String reference, Instant issueDate) {
     ensureCanBeIssued();
     if (reference == null || reference.isBlank()) {
@@ -138,6 +168,23 @@ public record InvoiceDraft(
             taxableTotal, taxTotal, total,
             createdAt, newUpdatedAt, newProviderReference, newIssuedAt
     );
+  }
+
+  private static Totals totalsOf(List<InvoiceItem> items) {
+    return new Totals(
+        items.stream().map(InvoiceItem::grossAmount).reduce(BigDecimal.ZERO, BigDecimal::add),
+        items.stream().map(InvoiceItem::discount).reduce(BigDecimal.ZERO, BigDecimal::add),
+        items.stream().map(InvoiceItem::taxableAmount).reduce(BigDecimal.ZERO, BigDecimal::add),
+        items.stream().map(InvoiceItem::taxAmount).reduce(BigDecimal.ZERO, BigDecimal::add),
+        items.stream().map(InvoiceItem::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add));
+  }
+
+  private record Totals(
+      BigDecimal subtotal,
+      BigDecimal discountTotal,
+      BigDecimal taxableTotal,
+      BigDecimal taxTotal,
+      BigDecimal total) {
   }
 
 }

@@ -91,4 +91,18 @@ public record ElectronicDocument(
         submittedAt == null ? result.submittedAt() : submittedAt,
         result.respondedAt(), result.responseCode(), result.responseMessage());
   }
+
+  public ElectronicDocument startSubmission(Instant attemptAt) {
+    Objects.requireNonNull(attemptAt, "attemptAt is required");
+    if (status != ElectronicDocumentStatus.PENDING_SEND
+        && status != ElectronicDocumentStatus.ERROR
+        && status != ElectronicDocumentStatus.SENDING) {
+      throw new IllegalStateException("document cannot be submitted from status " + status);
+    }
+    return new ElectronicDocument(
+        id, draftId, companyId, customerId, issuer, recipient, documentType, series, correlative,
+        fullNumber, recipientDocumentType, recipientDocumentNumber, currency, items, subtotal,
+        discountTotal, taxableTotal, taxTotal, total, ElectronicDocumentStatus.SENDING,
+        null, attemptAt, null, null, null);
+  }
 }

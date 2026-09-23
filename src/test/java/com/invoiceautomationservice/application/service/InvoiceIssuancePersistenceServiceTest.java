@@ -1,6 +1,7 @@
 package com.invoiceautomationservice.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -31,6 +32,8 @@ import com.invoiceautomationservice.domain.model.RecipientSnapshot;
 import com.invoiceautomationservice.domain.model.TaxpayerType;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,7 +62,8 @@ class InvoiceIssuancePersistenceServiceTest {
     accessService = mock(CompanyAccessService.class);
     service = new InvoiceIssuancePersistenceService(
         draftRepository, documentRepository, seriesRepository, companyRepository,
-        customerRepository, profileRepository, accessService);
+        customerRepository, profileRepository, accessService,
+        Clock.fixed(Instant.parse("2026-09-01T10:00:00Z"), ZoneOffset.UTC));
   }
 
   @Test
@@ -79,7 +83,7 @@ class InvoiceIssuancePersistenceServiceTest {
     PreparedEmission result = service.prepare(approved.id());
 
     assertThat(result.submitRequired()).isTrue();
-    assertThat(result.document().status()).isEqualTo(ElectronicDocumentStatus.PENDING_SEND);
+    assertThat(result.document().status()).isEqualTo(ElectronicDocumentStatus.SENDING);
     assertThat(result.document().fullNumber()).isEqualTo("B001-00000007");
     verify(accessService).requireAccess("company-1");
     verify(documentRepository).save(result.document());
@@ -101,8 +105,8 @@ class InvoiceIssuancePersistenceServiceTest {
   @Test
   void completesDocumentAndMarksDraftIssuedForAcceptedResult() {
     InvoiceDraft approved = approvedDraft();
-    ElectronicDocument pending = document(approved);
     Instant submittedAt = Instant.parse("2026-09-01T10:00:00Z");
+    ElectronicDocument pending = document(approved).startSubmission(submittedAt);
     BillingResult providerResult = new BillingResult(
         "provider-1", ElectronicDocumentStatus.ACCEPTED, submittedAt, submittedAt,
         "0", "Accepted");
@@ -113,7 +117,8 @@ class InvoiceIssuancePersistenceServiceTest {
     when(draftRepository.save(any(InvoiceDraft.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
-    ElectronicDocument completed = service.complete(pending.id(), providerResult);
+    ElectronicDocument completed = service.complete(
+        pending.id(), pending.submittedAt(), providerResult);
 
     assertThat(completed.status()).isEqualTo(ElectronicDocumentStatus.ACCEPTED);
     verify(draftRepository).save(org.mockito.ArgumentMatchers.argThat(
@@ -124,17 +129,81 @@ class InvoiceIssuancePersistenceServiceTest {
   @Test
   void errorResultDoesNotMarkDraftIssued() {
     InvoiceDraft approved = approvedDraft();
-    ElectronicDocument pending = document(approved);
     Instant failedAt = Instant.parse("2026-09-01T10:00:00Z");
+    ElectronicDocument pending = document(approved).startSubmission(failedAt);
     BillingResult error = new BillingResult(
         null, ElectronicDocumentStatus.ERROR, failedAt, failedAt, "TIMEOUT", "Timed out");
     when(documentRepository.findByIdForUpdate(pending.id())).thenReturn(pending);
     when(documentRepository.save(any(ElectronicDocument.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
-    assertThat(service.complete(pending.id(), error).status())
+    assertThat(service.complete(pending.id(), pending.submittedAt(), error).status())
         .isEqualTo(ElectronicDocumentStatus.ERROR);
     verify(draftRepository, never()).save(any());
+  }
+
+  @Test
+  void preparesRecoverableErrorForRetryWithSameDocumentIdentity() {
+    InvoiceDraft approved = approvedDraft();
+    Instant failedAt = Instant.parse("2026-09-01T09:55:00Z");
+    ElectronicDocument failed = document(approved).withBillingResult(new BillingResult(
+        null, ElectronicDocumentStatus.ERROR, failedAt, failedAt,
+        "PROVIDER_CALL_FAILED", "Timeout"));
+    when(documentRepository.findByIdForUpdate(failed.id())).thenReturn(failed);
+    when(documentRepository.save(any(ElectronicDocument.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    PreparedEmission retry = service.prepareRetry(failed.id());
+
+    assertThat(retry.document().id()).isEqualTo(failed.id());
+    assertThat(retry.document().fullNumber()).isEqualTo(failed.fullNumber());
+    assertThat(retry.document().status()).isEqualTo(ElectronicDocumentStatus.SENDING);
+    assertThat(retry.document().submittedAt()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
+    verifyNoInteractions(seriesRepository);
+  }
+
+  @Test
+  void rejectsRetryWhileAnotherSubmissionIsStillActive() {
+    ElectronicDocument sending = document(approvedDraft())
+        .startSubmission(Instant.parse("2026-09-01T09:59:00Z"));
+    when(documentRepository.findByIdForUpdate(sending.id())).thenReturn(sending);
+
+    assertThatThrownBy(() -> service.prepareRetry(sending.id()))
+        .isInstanceOf(com.invoiceautomationservice.infrastructure.config.exception
+            .ApplicationException.class)
+        .hasMessageContaining("cannot be retried from status SENDING");
+    verify(documentRepository, never()).save(any());
+  }
+
+  @Test
+  void recoversSubmissionThatHasBeenSendingForFiveMinutes() {
+    ElectronicDocument stale = document(approvedDraft())
+        .startSubmission(Instant.parse("2026-09-01T09:55:00Z"));
+    when(documentRepository.findByIdForUpdate(stale.id())).thenReturn(stale);
+    when(documentRepository.save(any(ElectronicDocument.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    PreparedEmission retry = service.prepareRetry(stale.id());
+
+    assertThat(retry.document().status()).isEqualTo(ElectronicDocumentStatus.SENDING);
+    assertThat(retry.document().submittedAt()).isEqualTo(Instant.parse("2026-09-01T10:00:00Z"));
+  }
+
+  @Test
+  void ignoresLateResponseFromAnOlderSubmissionAttempt() {
+    ElectronicDocument currentAttempt = document(approvedDraft())
+        .startSubmission(Instant.parse("2026-09-01T10:00:00Z"));
+    BillingResult lateResult = new BillingResult(
+        "provider-old", ElectronicDocumentStatus.ACCEPTED,
+        Instant.parse("2026-09-01T09:55:00Z"), Instant.parse("2026-09-01T10:01:00Z"),
+        "0", "Accepted");
+    when(documentRepository.findByIdForUpdate(currentAttempt.id())).thenReturn(currentAttempt);
+
+    ElectronicDocument result = service.complete(
+        currentAttempt.id(), Instant.parse("2026-09-01T09:55:00Z"), lateResult);
+
+    assertThat(result).isSameAs(currentAttempt);
+    verify(documentRepository, never()).save(any());
   }
 
   private InvoiceDraft approvedDraft() {

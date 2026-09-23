@@ -498,6 +498,35 @@
           }]
         },
         {
+          "name": "Edit invoice draft",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"SALES_RECEIPT\",\n  \"recipientDocumentType\": \"DNI\",\n  \"recipientDocumentNumber\": \"{{recipientDocumentNumber}}\",\n  \"currency\": \"PEN\",\n  \"items\": [\n    {\"description\": \"Servicio de consultoría actualizado\", \"unitCode\": \"NIU\", \"quantity\": 2.5, \"unitPrice\": 150.25, \"discount\": 0, \"taxAffectation\": \"TAXED\"},\n    {\"description\": \"Soporte actualizado\", \"unitCode\": \"NIU\", \"quantity\": 1, \"unitPrice\": 50.00, \"discount\": 0, \"taxAffectation\": \"TAXED\"}\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}"]
+            },
+            "description": "Reemplaza los datos editables y recalcula todos los importes mientras el estado sea DRAFT."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "const draft = pm.response.json().data;",
+                "pm.test('Draft remains editable and recalculated', () => { pm.expect(draft.status).to.eql('DRAFT'); pm.expect(draft.items[0].description).to.include('actualizado'); pm.expect(Number(draft.total)).to.eql(502.24); });"
+              ]
+            }
+          }]
+        },
+        {
           "name": "Approve invoice draft",
           "request": {
             "method": "POST",
@@ -547,6 +576,29 @@
                 "  pm.expect(document.respondedAt).to.be.a('string').and.not.empty;",
                 "});"
                 ,"pm.environment.set('electronicDocumentId', document.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Reject cancellation after numbering",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "cancel"]
+            },
+            "description": "La cancelación de un borrador DRAFT o APPROVED se realiza con este endpoint. En este punto de la colección ya existe un comprobante numerado, por lo que debe rechazarse."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 409', () => pm.response.to.have.status(409));",
+                "pm.test('Numbered draft cannot be cancelled', () => pm.expect(pm.response.json().errors[0]).to.include('already has a numbered electronic document'));"
               ]
             }
           }]
@@ -615,6 +667,29 @@
               "exec": [
                 "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
                 "pm.test('Provider status is available', () => pm.expect(['SENT', 'ACCEPTED', 'REJECTED', 'ERROR']).to.include(pm.response.json().data.status));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Retry electronic document submission",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/electronic-documents/{{electronicDocumentId}}/retry",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "electronic-documents", "{{electronicDocumentId}}", "retry"]
+            },
+            "description": "Reenvía el mismo comprobante únicamente cuando está en ERROR, PENDING_SEND o SENDING durante al menos cinco minutos. Conserva serie, correlativo e idempotencyKey. Con el proveedor mock, que acepta inmediatamente, esta petición devuelve 409 para demostrar que un estado final no es reintentable."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Final document cannot be retried', () => pm.response.to.have.status(409));",
+                "pm.test('Returns retry eligibility error', () => pm.expect(pm.response.json().errors[0]).to.include('cannot be retried'));"
               ]
             }
           }]

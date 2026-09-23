@@ -156,15 +156,29 @@ La emisión adquiere un bloqueo pesimista sobre el borrador para serializar soli
 
 La emisión no mantiene una transacción de base de datos abierta mientras espera una respuesta HTTP del proveedor. El flujo se divide en tres fases:
 
-1. Una transacción corta bloquea el borrador, reserva el correlativo y confirma el `ElectronicDocument` como `PENDING_SEND`.
+1. Una transacción corta bloquea el borrador, reserva el correlativo y confirma el `ElectronicDocument` como `SENDING`.
 2. `BillingProvider.submit(...)` se ejecuta fuera de cualquier transacción de persistencia, usando el ID determinístico como clave de idempotencia.
 3. Otra transacción corta bloquea el comprobante y guarda la respuesta. Si el proveedor falla con una excepción, se persiste el estado `ERROR` junto con el código `PROVIDER_CALL_FAILED`; si responde `SENT` o `ACCEPTED`, el borrador pasa a `ISSUED`.
 
-De esta forma, una lentitud o caída externa no retiene conexiones ni bloqueos de PostgreSQL y tampoco revierte la numeración ya asignada. Un cierre abrupto entre las fases deja un registro auditable en `PENDING_SEND`, preparado para el mecanismo de reintentos controlados.
+De esta forma, una lentitud o caída externa no retiene conexiones ni bloqueos de PostgreSQL y tampoco revierte la numeración ya asignada. Un cierre abrupto entre las fases deja un registro auditable en `SENDING`, recuperable mediante el mecanismo de reintentos controlados.
+
+### Reintentos y errores recuperables
+
+`POST /api/v1/electronic-documents/{id}/retry` vuelve a enviar un comprobante en `ERROR` o `PENDING_SEND` reutilizando exactamente el mismo ID, serie, correlativo, número e `idempotencyKey`. Nunca crea otro comprobante ni consume una nueva numeración.
+
+Antes de llamar al proveedor, una transacción bloquea el registro y lo cambia a `SENDING`. Mientras ese intento tenga menos de cinco minutos, otra solicitud recibe `409 Conflict`; esto evita envíos concurrentes sin mantener una transacción abierta durante la llamada HTTP. Si el proceso se interrumpe y queda en `SENDING`, podrá recuperarse una vez cumplida esa ventana de seguridad.
+
+Los fallos de comunicación se guardan como `ERROR` con código `PROVIDER_CALL_FAILED` y son recuperables. `ACCEPTED` y `REJECTED` son definitivos y no admiten reintento. Cada intento conserva la clave idempotente para que el proveedor pueda devolver el resultado original si llegó a procesar una solicitud cuya respuesta se perdió.
+
+### Edición y cancelación del borrador
+
+`PUT /api/v1/invoice-drafts/{id}` reemplaza receptor, tipo de comprobante, moneda e ítems mientras el borrador permanezca en `DRAFT`. El backend vuelve a resolver el receptor por DNI/RUC, valida la pertenencia a la empresa y recalcula descuentos, bases imponibles, IGV y totales; `companyId` no es editable.
+
+`POST /api/v1/invoice-drafts/{id}/cancel` cambia un borrador `DRAFT` o `APPROVED` a `CANCELLED`. La transición es definitiva: un borrador cancelado no puede editarse, aprobarse ni emitirse. Si ya se asignó serie y correlativo, la cancelación se rechaza con `409 Conflict`, porque ese caso corresponde a la futura anulación de un comprobante electrónico y no a la cancelación de un borrador.
 
 ### Envío y aceptación del proveedor
 
-El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.
+El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.
 
 `POST /api/v1/electronic-documents/{id}/refresh-status` consulta nuevamente un documento enviado. Los estados `ACCEPTED` y `REJECTED` son finales y no generan llamadas adicionales.
 

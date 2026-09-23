@@ -4,6 +4,8 @@ import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRe
 import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
+import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -18,10 +20,16 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 @RestController
 @RequestMapping("/api/v1/invoice-drafts")
 @RequiredArgsConstructor
+@Validated
 public class InvoiceDraftController {
 
   private final InvoiceDraftUseCase invoiceDraftUseCase;
@@ -39,6 +47,19 @@ public class InvoiceDraftController {
     InvoiceDraftResponse draft = invoiceDraftUseCase.findById(id);
     return ResponseEntity.ok(ApiResponse.success(
         HttpStatus.OK.value(), "Invoice draft found", draft));
+  }
+
+  @GetMapping
+  public ResponseEntity<ApiResponse<PageResponse<InvoiceDraftResponse>>> search(
+      @RequestHeader(value = "X-Company-Id", required = false) String companyId,
+      @RequestParam(required = false) InvoiceDraftStatus status,
+      @RequestParam(required = false) String recipientDocumentNumber,
+      @RequestParam(defaultValue = "0") @Min(0) int page,
+      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+    var result = invoiceDraftUseCase.search(
+        companyId, status, recipientDocumentNumber, page, size);
+    return ResponseEntity.ok(ApiResponse.success(
+        HttpStatus.OK.value(), "Invoice drafts found", result));
   }
 
   @PutMapping("/{id}")

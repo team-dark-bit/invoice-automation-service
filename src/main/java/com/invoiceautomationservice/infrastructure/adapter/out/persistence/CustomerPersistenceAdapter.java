@@ -6,6 +6,12 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mappe
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaCustomerRepository;
 import java.util.List;
+import com.invoiceautomationservice.application.model.PageQuery;
+import com.invoiceautomationservice.application.model.PageResult;
+import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.CustomerEntity;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -46,6 +52,27 @@ public class CustomerPersistenceAdapter implements CustomerRepository {
         .findByCompanyIdAndDocumentTypeAndDocumentNumber(
             companyId, documentType, documentNumber)
         .map(customerDaoDomainMapper::toDomain);
+  }
+
+  @Override
+  public PageResult<Customer> search(
+      String companyId, String queryText, Boolean active, PageQuery pageQuery) {
+    Specification<CustomerEntity> specification =
+        (root, query, cb) -> cb.equal(root.get("companyId"), companyId);
+    if (active != null) specification = specification.and(
+        (root, query, cb) -> cb.equal(root.get("active"), active));
+    if (queryText != null && !queryText.isBlank()) {
+      String value = "%" + queryText.strip().toLowerCase() + "%";
+      specification = specification.and((root, query, cb) -> cb.or(
+          cb.like(cb.lower(root.get("fullName")), value),
+          cb.like(cb.lower(root.get("companyName")), value),
+          cb.like(cb.lower(root.get("documentNumber")), value)));
+    }
+    var result = jpaCustomerRepository.findAll(specification, PageRequest.of(
+        pageQuery.page(), pageQuery.size(), Sort.by("fullName").ascending()));
+    return new PageResult<>(result.getContent().stream()
+        .map(customerDaoDomainMapper::toDomain).toList(), result.getNumber(), result.getSize(),
+        result.getTotalElements(), result.getTotalPages());
   }
 }
 

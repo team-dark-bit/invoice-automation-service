@@ -176,6 +176,17 @@ Los fallos de comunicación se guardan como `ERROR` con código `PROVIDER_CALL_F
 
 `POST /api/v1/invoice-drafts/{id}/cancel` cambia un borrador `DRAFT` o `APPROVED` a `CANCELLED`. La transición es definitiva: un borrador cancelado no puede editarse, aprobarse ni emitirse. Si ya se asignó serie y correlativo, la cancelación se rechaza con `409 Conflict`, porque ese caso corresponde a la futura anulación de un comprobante electrónico y no a la cancelación de un borrador.
 
+### Listados, búsqueda y paginación
+
+Los listados paginados devuelven `content`, `page`, `size`, `totalElements`, `totalPages`, `first` y `last`. `page` comienza en cero y `size` admite valores entre 1 y 100. Todas las consultas respetan las empresas asociadas al usuario y, cuando corresponde, el header `X-Company-Id`.
+
+- `GET /api/v1/companies/search`: filtros `query` (RUC, razón social o nombre comercial) y `active`.
+- `GET /customers/search`: filtros `query` (DNI/RUC o nombre) y `active`.
+- `GET /api/v1/invoice-drafts`: filtros `status` y `recipientDocumentNumber`.
+- `GET /api/v1/electronic-documents`: filtros `status` y `documentNumber`.
+
+Los borradores y comprobantes se ordenan del más reciente al más antiguo; empresas y clientes se ordenan alfabéticamente. Los filtros se ejecutan en PostgreSQL mediante consultas paginadas, no cargando todos los registros en memoria.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

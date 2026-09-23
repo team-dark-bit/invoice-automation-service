@@ -14,6 +14,12 @@ import com.invoiceautomationservice.infrastructure.config.exception.ApplicationE
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.invoiceautomationservice.application.model.PageQuery;
+import com.invoiceautomationservice.application.model.PageResult;
+import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +73,30 @@ public class InvoiceDraftPersistenceAdapter implements InvoiceDraftRepository {
         .map(itemMapper::toDomain)
         .toList();
     return toDomain(draft, items);
+  }
+
+  @Override
+  public PageResult<InvoiceDraft> search(
+      String companyId, InvoiceDraftStatus status, String recipientDocumentNumber,
+      PageQuery pageQuery) {
+    Specification<InvoiceDraftEntity> specification =
+        (root, query, cb) -> cb.equal(root.get("companyId"), companyId);
+    if (status != null) {
+      specification = specification.and(
+          (root, query, cb) -> cb.equal(root.get("status"), status));
+    }
+    if (recipientDocumentNumber != null && !recipientDocumentNumber.isBlank()) {
+      String value = "%" + recipientDocumentNumber.strip().toLowerCase() + "%";
+      specification = specification.and((root, query, cb) ->
+          cb.like(cb.lower(root.get("recipientDocumentNumber")), value));
+    }
+    var result = draftRepository.findAll(specification, PageRequest.of(
+        pageQuery.page(), pageQuery.size(), Sort.by(Sort.Direction.DESC, "createdAt")));
+    List<InvoiceDraft> drafts = result.getContent().stream().map(entity -> toDomain(
+        entity, itemRepository.findAllByInvoiceDraftIdOrderByPosition(entity.getId()).stream()
+            .map(itemMapper::toDomain).toList())).toList();
+    return new PageResult<>(drafts, result.getNumber(), result.getSize(),
+        result.getTotalElements(), result.getTotalPages());
   }
 
   private InvoiceDraft toDomain(InvoiceDraftEntity draft, List<InvoiceItem> items) {

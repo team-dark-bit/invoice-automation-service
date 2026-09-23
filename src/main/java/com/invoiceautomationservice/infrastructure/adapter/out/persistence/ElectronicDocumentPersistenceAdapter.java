@@ -14,6 +14,12 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repos
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
 import java.util.UUID;
+import com.invoiceautomationservice.application.model.PageQuery;
+import com.invoiceautomationservice.application.model.PageResult;
+import com.invoiceautomationservice.domain.model.ElectronicDocumentStatus;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import java.util.Optional;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +57,30 @@ public class ElectronicDocumentPersistenceAdapter implements ElectronicDocumentR
           .stream().map(this::toItem).toList();
       return toDomain(entity, items);
     });
+  }
+
+  @Override
+  public PageResult<ElectronicDocument> search(
+      String companyId, ElectronicDocumentStatus status, String documentNumber,
+      PageQuery pageQuery) {
+    Specification<ElectronicDocumentEntity> specification =
+        (root, query, cb) -> cb.equal(root.get("companyId"), companyId);
+    if (status != null) {
+      specification = specification.and(
+          (root, query, cb) -> cb.equal(root.get("status"), status));
+    }
+    if (documentNumber != null && !documentNumber.isBlank()) {
+      String value = "%" + documentNumber.strip().toLowerCase() + "%";
+      specification = specification.and((root, query, cb) ->
+          cb.like(cb.lower(root.get("fullNumber")), value));
+    }
+    var result = documentRepository.findAll(specification, PageRequest.of(
+        pageQuery.page(), pageQuery.size(), Sort.by(Sort.Direction.DESC, "submittedAt")));
+    List<ElectronicDocument> documents = result.getContent().stream().map(entity -> toDomain(
+        entity, itemRepository.findAllByDocumentIdOrderByPosition(entity.getId()).stream()
+            .map(this::toItem).toList())).toList();
+    return new PageResult<>(documents, result.getNumber(), result.getSize(),
+        result.getTotalElements(), result.getTotalPages());
   }
 
   @Override

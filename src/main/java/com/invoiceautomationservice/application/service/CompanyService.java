@@ -2,6 +2,8 @@ package com.invoiceautomationservice.application.service;
 
 import com.invoiceautomationservice.application.dto.request.CreateCompanyRequest;
 import com.invoiceautomationservice.application.dto.response.CompanyResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
+import com.invoiceautomationservice.application.model.PageQuery;
 import com.invoiceautomationservice.application.port.in.CompanyUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.service.mapper.CompanyDomainResponseMapper;
@@ -39,5 +41,12 @@ public class CompanyService implements CompanyUseCase {
     return companyRepository.findAllByIdInAndActiveTrue(companyAccessService.currentCompanyIds()).stream()
             .map(responseMapper::toResponse)
             .toList();
+  }
+
+  @Override
+  public PageResponse<CompanyResponse> search(String query, Boolean active, int page, int size) {
+    return companyRepository.search(
+        companyAccessService.currentCompanyIds(), query, active, new PageQuery(page, size))
+        .map(responseMapper::toResponse);
   }
 }

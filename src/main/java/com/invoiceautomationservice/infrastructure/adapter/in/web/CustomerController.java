@@ -2,6 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.in.web;
 
 import com.invoiceautomationservice.application.dto.request.CreateCustomerRequest;
 import com.invoiceautomationservice.application.dto.response.CustomerResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
 import com.invoiceautomationservice.application.port.in.CustomerUseCase;
 import com.invoiceautomationservice.commons.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -17,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 @RestController
 @RequestMapping("/customers")
@@ -52,6 +56,17 @@ public class CustomerController {
   ) {
     List<CustomerResponse> customers = customerUseCase.findAll(companyId);
     return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Customers found", customers));
+  }
+
+  @GetMapping("/search")
+  public ResponseEntity<ApiResponse<PageResponse<CustomerResponse>>> search(
+      @RequestHeader(value = "X-Company-Id", required = false) String companyId,
+      @RequestParam(required = false) String query,
+      @RequestParam(required = false) Boolean active,
+      @RequestParam(defaultValue = "0") @Min(0) int page,
+      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+    return ResponseEntity.ok(ApiResponse.success(HttpStatus.OK.value(), "Customers found",
+        customerUseCase.search(companyId, query, active, page, size)));
   }
 
 }

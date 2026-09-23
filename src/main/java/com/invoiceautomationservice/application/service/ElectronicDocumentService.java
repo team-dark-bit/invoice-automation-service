@@ -2,6 +2,8 @@ package com.invoiceautomationservice.application.service;
 
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.application.dto.response.InvoiceItemResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
+import com.invoiceautomationservice.application.model.PageQuery;
 import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.port.out.BillingProvider;
 import com.invoiceautomationservice.domain.model.ElectronicDocument;
@@ -27,6 +29,15 @@ public class ElectronicDocumentService {
     ElectronicDocument document = repository.findById(id);
     companyAccessService.requireAccess(document.companyId());
     return toResponse(document);
+  }
+
+  @Transactional(readOnly = true)
+  public PageResponse<ElectronicDocumentResponse> search(
+      String requestedCompanyId, ElectronicDocumentStatus status, String documentNumber,
+      int page, int size) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    return repository.search(companyId, status, documentNumber, new PageQuery(page, size))
+        .map(this::toResponse);
   }
 
   @Transactional

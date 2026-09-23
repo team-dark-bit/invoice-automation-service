@@ -3,6 +3,8 @@ package com.invoiceautomationservice.application.service;
 import com.invoiceautomationservice.application.service.mapper.CustomerRequestDomainMapper;
 import com.invoiceautomationservice.application.dto.request.CreateCustomerRequest;
 import com.invoiceautomationservice.application.dto.response.CustomerResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
+import com.invoiceautomationservice.application.model.PageQuery;
 import com.invoiceautomationservice.application.port.in.CustomerUseCase;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.dto.CustomerDomainResponseMapper;
@@ -40,6 +42,14 @@ public class CustomerService implements CustomerUseCase {
             .stream()
             .map(domainResponseMapper::toResponse)
             .toList();
+  }
+
+  @Override
+  public PageResponse<CustomerResponse> search(
+      String requestedCompanyId, String query, Boolean active, int page, int size) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    return customerRepository.search(companyId, query, active, new PageQuery(page, size))
+        .map(domainResponseMapper::toResponse);
   }
 }
 

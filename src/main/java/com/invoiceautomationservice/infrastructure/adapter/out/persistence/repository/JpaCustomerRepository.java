@@ -5,7 +5,8 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface JpaCustomerRepository extends JpaRepository<CustomerEntity, String> {
+public interface JpaCustomerRepository extends JpaRepository<CustomerEntity, String>,
+    org.springframework.data.jpa.repository.JpaSpecificationExecutor<CustomerEntity> {
     Optional<CustomerEntity> findByIdAndCompanyId(String id, String companyId);
     List<CustomerEntity> findAllByCompanyIdAndActiveTrue(String companyId);
     Optional<CustomerEntity> findByCompanyIdAndDocumentTypeAndDocumentNumber(

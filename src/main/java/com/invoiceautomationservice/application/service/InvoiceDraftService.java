@@ -10,6 +10,8 @@ import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRe
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
 import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
+import com.invoiceautomationservice.application.dto.response.PageResponse;
+import com.invoiceautomationservice.application.model.PageQuery;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
@@ -23,6 +25,7 @@ import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.application.dto.response.ElectronicDocumentResponse;
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -88,6 +91,17 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     InvoiceDraft draft = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(draft.companyId());
     return responseMapper.toResponse(draft);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public PageResponse<InvoiceDraftResponse> search(
+      String requestedCompanyId, InvoiceDraftStatus status, String recipientDocumentNumber,
+      int page, int size) {
+    String companyId = companyAccessService.resolveCompanyId(requestedCompanyId);
+    return invoiceDraftRepository.search(
+        companyId, status, recipientDocumentNumber, new PageQuery(page, size))
+        .map(responseMapper::toResponse);
   }
 
   @Override

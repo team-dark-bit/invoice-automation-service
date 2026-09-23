@@ -8,7 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface JpaInvoiceDraftRepository extends JpaRepository<InvoiceDraftEntity, UUID> {
+public interface JpaInvoiceDraftRepository extends JpaRepository<InvoiceDraftEntity, UUID>,
+    org.springframework.data.jpa.repository.JpaSpecificationExecutor<InvoiceDraftEntity> {
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select draft from InvoiceDraft draft where draft.id = :id")
   java.util.Optional<InvoiceDraftEntity> findByIdForUpdate(@Param("id") UUID id);

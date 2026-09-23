@@ -20,6 +20,8 @@ import com.invoiceautomationservice.application.port.out.IssuerTaxProfileReposit
 import com.invoiceautomationservice.application.port.out.InvoiceDraftRepository;
 import com.invoiceautomationservice.application.port.out.ElectronicDocumentRepository;
 import com.invoiceautomationservice.application.service.mapper.InvoiceDraftDomainResponseMapper;
+import com.invoiceautomationservice.application.model.PageQuery;
+import com.invoiceautomationservice.application.model.PageResult;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.BillingResult;
 import com.invoiceautomationservice.domain.model.BillingSubmission;
@@ -196,6 +198,28 @@ class CreateInvoiceDraftServiceTest {
     assertThatThrownBy(() -> service.issue(draft.id()))
             .isInstanceOf(com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException.class);
     verifyNoInteractions(billingProvider);
+  }
+
+  @Test
+  void searchesDraftsWithinResolvedCompanyAndMapsPagination() {
+    InvoiceDraft draft = draft();
+    when(accessService.resolveCompanyId("company-1")).thenReturn("company-1");
+    when(draftRepository.search(
+        org.mockito.ArgumentMatchers.eq("company-1"),
+        org.mockito.ArgumentMatchers.eq(
+            com.invoiceautomationservice.domain.model.InvoiceDraftStatus.DRAFT),
+        org.mockito.ArgumentMatchers.eq("1234"), any(PageQuery.class)))
+        .thenReturn(new PageResult<>(List.of(draft), 0, 20, 1, 1));
+    when(mapper.toResponse(draft)).thenReturn(response(draft));
+
+    var result = service.search(
+        "company-1", com.invoiceautomationservice.domain.model.InvoiceDraftStatus.DRAFT,
+        "1234", 0, 20);
+
+    assertThat(result.content()).hasSize(1);
+    assertThat(result.totalElements()).isEqualTo(1);
+    assertThat(result.first()).isTrue();
+    assertThat(result.last()).isTrue();
   }
 
   @Test

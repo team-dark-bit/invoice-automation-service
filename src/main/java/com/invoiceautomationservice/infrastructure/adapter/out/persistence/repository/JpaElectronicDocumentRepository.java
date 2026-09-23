@@ -10,7 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface JpaElectronicDocumentRepository
-    extends JpaRepository<ElectronicDocumentEntity, UUID> {
+    extends JpaRepository<ElectronicDocumentEntity, UUID>,
+    org.springframework.data.jpa.repository.JpaSpecificationExecutor<ElectronicDocumentEntity> {
   Optional<ElectronicDocumentEntity> findByDraftId(UUID draftId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)

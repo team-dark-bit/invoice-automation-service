@@ -695,6 +695,31 @@
           }]
         }
       ]
+    },
+    {
+      "name": "Search and Pagination",
+      "item": [
+        {
+          "name": "Search accessible companies",
+          "request": {"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/api/v1/companies/search?query=Postman&page=0&size=10","host":["{{baseUrl}}"],"path":["api","v1","companies","search"],"query":[{"key":"query","value":"Postman"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns company page', () => { const page = pm.response.json().data; pm.expect(page.content).to.be.an('array'); pm.expect(page).to.have.property('totalElements'); });"]}}]
+        },
+        {
+          "name": "Search customers",
+          "request": {"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/customers/search?query={{recipientDocumentNumber}}&active=true&page=0&size=10","host":["{{baseUrl}}"],"path":["customers","search"],"query":[{"key":"query","value":"{{recipientDocumentNumber}}"},{"key":"active","value":"true"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns customer page', () => pm.expect(pm.response.json().data.content).to.be.an('array')); "]}}]
+        },
+        {
+          "name": "List invoice drafts by status",
+          "request": {"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/api/v1/invoice-drafts?status=ISSUED&page=0&size=10","host":["{{baseUrl}}"],"path":["api","v1","invoice-drafts"],"query":[{"key":"status","value":"ISSUED"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns draft page', () => pm.expect(pm.response.json().data.content).to.be.an('array')); "]}}]
+        },
+        {
+          "name": "Search electronic documents",
+          "request": {"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/api/v1/electronic-documents?status=ACCEPTED&page=0&size=10","host":["{{baseUrl}}"],"path":["api","v1","electronic-documents"],"query":[{"key":"status","value":"ACCEPTED"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns document page', () => pm.expect(pm.response.json().data.content).to.be.an('array')); "]}}]
+        }
+      ]
     }
   ]
 }

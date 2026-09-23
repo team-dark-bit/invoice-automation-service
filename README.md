@@ -269,6 +269,20 @@ El motor guarda el mensaje entrante y su respuesta, mantiene el contexto `EMPTY`
 
 `externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
+### Pruebas de integración y concurrencia
+
+La suite rápida continúa ejecutándose con `./mvnw test` (`.\\mvnw.cmd test` en Windows). Las pruebas `*IT` se ejecutan con `./mvnw verify` y utilizan Testcontainers para crear un PostgreSQL 17 temporal y descartable; requieren que Docker esté activo y no utilizan ni modifican la base local del desarrollador.
+
+`PostgreSqlConcurrencyIT` verifica sobre infraestructura real:
+
+- aplicación completa de Flyway hasta la última migración y validación del esquema por Hibernate;
+- existencia de las tablas críticas de comprobantes, auditoría y conversaciones;
+- aislamiento de membresías entre empresas;
+- reserva simultánea de 20 correlativos, sin duplicados ni saltos;
+- dos solicitudes concurrentes para el mismo borrador producen un único `ElectronicDocument`, consumen un solo correlativo y solo una continúa hacia el proveedor.
+
+Maven Failsafe ejecuta estas pruebas durante la fase `verify`. Si Docker no está disponible, Testcontainers marca únicamente la suite de infraestructura como omitida; en CI debe considerarse Docker un requisito y comprobarse que no existan pruebas omitidas.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

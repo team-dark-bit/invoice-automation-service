@@ -21,6 +21,7 @@ public record ElectronicDocument(
     IdentityDocumentType recipientDocumentType,
     String recipientDocumentNumber,
     String currency,
+    Instant emissionAt,
     List<InvoiceItem> items,
     BigDecimal subtotal,
     BigDecimal discountTotal,
@@ -47,6 +48,7 @@ public record ElectronicDocument(
     Objects.requireNonNull(recipientDocumentType);
     Objects.requireNonNull(recipientDocumentNumber);
     Objects.requireNonNull(currency);
+    Objects.requireNonNull(emissionAt);
     Objects.requireNonNull(status);
     if (recipient.documentType() != recipientDocumentType
         || !recipient.documentNumber().equals(recipientDocumentNumber)) {
@@ -68,7 +70,7 @@ public record ElectronicDocument(
         deterministicId(draft.id()), draft.id(), draft.companyId(), draft.customerId(), issuer, recipient,
         draft.documentType(),
         number.series(), number.correlative(), number.fullNumber(), draft.recipientDocumentType(),
-        draft.recipientDocumentNumber(), draft.currency(), draft.items(), draft.subtotal(),
+        draft.recipientDocumentNumber(), draft.currency(), draft.updatedAt(), draft.items(), draft.subtotal(),
         draft.discountTotal(), draft.taxableTotal(), draft.taxTotal(), draft.total(),
         ElectronicDocumentStatus.PENDING_SEND, null, null, null, null, null);
   }
@@ -86,7 +88,7 @@ public record ElectronicDocument(
     return new ElectronicDocument(
         id, draftId, companyId, customerId, issuer, recipient, documentType, series, correlative,
         fullNumber,
-        recipientDocumentType, recipientDocumentNumber, currency, items, subtotal, discountTotal,
+        recipientDocumentType, recipientDocumentNumber, currency, emissionAt, items, subtotal, discountTotal,
         taxableTotal, taxTotal, total, result.status(), result.reference(),
         submittedAt == null ? result.submittedAt() : submittedAt,
         result.respondedAt(), result.responseCode(), result.responseMessage());
@@ -101,7 +103,7 @@ public record ElectronicDocument(
     }
     return new ElectronicDocument(
         id, draftId, companyId, customerId, issuer, recipient, documentType, series, correlative,
-        fullNumber, recipientDocumentType, recipientDocumentNumber, currency, items, subtotal,
+        fullNumber, recipientDocumentType, recipientDocumentNumber, currency, emissionAt, items, subtotal,
         discountTotal, taxableTotal, taxTotal, total, ElectronicDocumentStatus.SENDING,
         null, attemptAt, null, null, null);
   }

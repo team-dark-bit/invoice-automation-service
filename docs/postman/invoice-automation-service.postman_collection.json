@@ -570,6 +570,7 @@
                 "  pm.expect(document.fullNumber).to.match(/^B001-\\d{8}$/);",
                 "  pm.expect(document.providerReference).to.eql(`MOCK-${document.fullNumber}`);",
                 "  pm.expect(document.status).to.eql('ACCEPTED');",
+                "  pm.expect(document.emissionAt).to.be.a('string').and.not.empty;",
                 "  pm.expect(document.issuer.taxId).to.eql(pm.environment.get('taxId'));",
                 "  pm.expect(document.recipient.documentNumber).to.eql(pm.environment.get('recipientDocumentNumber'));",
                 "  pm.expect(document.submittedAt).to.be.a('string').and.not.empty;",

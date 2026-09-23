@@ -24,6 +24,7 @@ public record ElectronicDocumentResponse(
     IdentityDocumentType recipientDocumentType,
     String recipientDocumentNumber,
     String currency,
+    Instant emissionAt,
     List<InvoiceItemResponse> items,
     BigDecimal subtotal,
     BigDecimal discountTotal,

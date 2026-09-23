@@ -68,6 +68,7 @@ public class ElectronicDocumentService {
         document.issuer(), document.recipient(),
         document.documentType(), document.series(), document.correlative(), document.fullNumber(),
         document.recipientDocumentType(), document.recipientDocumentNumber(), document.currency(),
+        document.emissionAt(),
         document.items().stream().map(this::toItemResponse).toList(), document.subtotal(),
         document.discountTotal(), document.taxableTotal(), document.taxTotal(), document.total(),
         document.status(), document.providerReference(), document.submittedAt(),

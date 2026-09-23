@@ -48,6 +48,7 @@ public class ElectronicDocumentEntity {
   private IdentityDocumentType recipientDocumentType;
   @Column(name = "recipient_document_number", nullable = false) private String recipientDocumentNumber;
   @Column(nullable = false, length = 3) private String currency;
+  @Column(name = "emission_at", nullable = false) private Instant emissionAt;
   @Column(nullable = false, precision = 20, scale = 2) private BigDecimal subtotal;
   @Column(name = "discount_total", nullable = false, precision = 20, scale = 2)
   private BigDecimal discountTotal;

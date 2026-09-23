@@ -187,6 +187,20 @@ Los listados paginados devuelven `content`, `page`, `size`, `totalElements`, `to
 
 Los borradores y comprobantes se ordenan del más reciente al más antiguo; empresas y clientes se ordenan alfabéticamente. Los filtros se ejecutan en PostgreSQL mediante consultas paginadas, no cargando todos los registros en memoria.
 
+### Contrato tributario mínimo de NUBEFACT
+
+`BillingSubmission` contiene los datos necesarios para construir la operación `generar_comprobante` del ejemplo oficial de NUBEFACT, manteniendo el puerto independiente del transporte HTTP:
+
+- tipo de comprobante NUBEFACT (`1` factura, `2` boleta), serie y correlativo;
+- transacción SUNAT `1`, fecha de emisión inmutable y moneda (`1` PEN, `2` USD);
+- receptor con tipo NUBEFACT (`1` DNI, `6` RUC), denominación, dirección y correo;
+- porcentaje de IGV, total gravado, exonerado, inafecto, descuentos, IGV y total;
+- ítems con código estable, unidad, cantidad, valor unitario sin IGV, precio unitario con IGV, subtotal, descuento, IGV y total;
+- tipo de IGV NUBEFACT (`1` gravado, `8` exonerado, `9` inafecto);
+- envío automático a SUNAT activado, envío automático al cliente desactivado y `codigo_unico` representado por `idempotencyKey`.
+
+La fecha de emisión se guarda en `ElectronicDocument.emissionAt` y no cambia durante los reintentos. La migración `V17__add_electronic_document_emission_date.sql` completa ese snapshot para bases existentes. El adaptador NUBEFACT real únicamente deberá serializar estos valores con los nombres JSON del proveedor y añadir URL/token de cada empresa.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

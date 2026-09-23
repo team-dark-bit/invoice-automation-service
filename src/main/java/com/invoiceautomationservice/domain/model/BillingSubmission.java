@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import java.util.Objects;
+import java.time.Instant;
 
 public record BillingSubmission(
     UUID documentId,
@@ -12,19 +13,29 @@ public record BillingSubmission(
     String series,
     long correlative,
     InvoiceDocumentType documentType,
+    String operation,
+    String sunatTransaction,
+    Instant emissionAt,
     String currency,
+    String currencyCode,
     Issuer issuer,
     Recipient recipient,
     List<Item> items,
     BigDecimal subtotal,
     BigDecimal discountTotal,
     BigDecimal taxableTotal,
+    BigDecimal exemptTotal,
+    BigDecimal unaffectedTotal,
     BigDecimal taxTotal,
-    BigDecimal total
+    BigDecimal total,
+    BigDecimal igvPercentage,
+    boolean sendAutomaticallyToSunat,
+    boolean sendAutomaticallyToCustomer
 ) {
   public BillingSubmission {
     Objects.requireNonNull(documentId, "documentId is required");
     Objects.requireNonNull(idempotencyKey, "idempotencyKey is required");
+    Objects.requireNonNull(emissionAt, "emissionAt is required");
     if (idempotencyKey.isBlank()) {
       throw new IllegalArgumentException("idempotencyKey must not be blank");
     }
@@ -53,6 +64,7 @@ public record BillingSubmission(
   ) {}
 
   public record Item(
+      String code,
       String description,
       UnitCode unitCode,
       BigDecimal quantity,
@@ -63,6 +75,10 @@ public record BillingSubmission(
       BigDecimal grossAmount,
       BigDecimal taxableAmount,
       BigDecimal taxAmount,
-      BigDecimal lineTotal
+      BigDecimal lineTotal,
+      BigDecimal unitValue,
+      BigDecimal unitPriceWithTax,
+      BigDecimal subtotal,
+      String igvTypeCode
   ) {}
 }

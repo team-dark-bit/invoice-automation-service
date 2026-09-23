@@ -184,6 +184,16 @@ class CreateInvoiceDraftServiceTest {
     assertThat(submissionCaptor.getValue().recipient().address()).isEqualTo("Customer address");
     assertThat(submissionCaptor.getValue().idempotencyKey())
         .isEqualTo(submissionCaptor.getValue().documentId().toString());
+    assertThat(submissionCaptor.getValue().operation()).isEqualTo("generar_comprobante");
+    assertThat(submissionCaptor.getValue().documentType().nubefactCode()).isEqualTo("2");
+    assertThat(submissionCaptor.getValue().recipient().documentType().nubefactCode())
+        .isEqualTo("1");
+    assertThat(submissionCaptor.getValue().currencyCode()).isEqualTo("1");
+    assertThat(submissionCaptor.getValue().emissionAt())
+        .isEqualTo(Instant.parse("2026-09-01T09:00:00Z"));
+    assertThat(submissionCaptor.getValue().igvPercentage()).isEqualByComparingTo("18.00");
+    assertThat(submissionCaptor.getValue().items().getFirst().igvTypeCode()).isEqualTo("9");
+    assertThat(submissionCaptor.getValue().sendAutomaticallyToSunat()).isTrue();
     verify(issuancePersistenceService).complete(
         pending.id(), pending.submittedAt(), billingResult);
   }

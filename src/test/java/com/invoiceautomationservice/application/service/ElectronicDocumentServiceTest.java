@@ -32,7 +32,8 @@ class ElectronicDocumentServiceTest {
     BillingProvider provider = mock(BillingProvider.class);
     ElectronicDocumentService service = new ElectronicDocumentService(
         repository, accessService, provider,
-        mock(InvoiceIssuancePersistenceService.class), mock(BillingSubmissionService.class));
+        mock(InvoiceIssuancePersistenceService.class), mock(BillingSubmissionService.class),
+        mock(AuditTrailService.class));
     Instant submittedAt = Instant.parse("2026-09-20T10:00:00Z");
     ElectronicDocument sent = provisional().withBillingResult(new BillingResult(
         "PROVIDER-123", ElectronicDocumentStatus.SENT, submittedAt,
@@ -63,7 +64,8 @@ class ElectronicDocumentServiceTest {
         mock(InvoiceIssuancePersistenceService.class);
     BillingSubmissionService submission = mock(BillingSubmissionService.class);
     ElectronicDocumentService service = new ElectronicDocumentService(
-        repository, accessService, provider, persistence, submission);
+        repository, accessService, provider, persistence, submission,
+        mock(AuditTrailService.class));
     ElectronicDocument sending = provisional()
         .startSubmission(Instant.parse("2026-09-20T10:00:00Z"));
     ElectronicDocument accepted = sending.withBillingResult(new BillingResult(

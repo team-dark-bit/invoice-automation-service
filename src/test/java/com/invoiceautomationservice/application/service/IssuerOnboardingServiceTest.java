@@ -25,7 +25,8 @@ class IssuerOnboardingServiceTest {
     CompanyAccessService accessService = mock(CompanyAccessService.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-20T10:00:00Z"), ZoneOffset.UTC);
     IssuerOnboardingService service = new IssuerOnboardingService(
-        companyRepository, profileRepository, accessService, clock);
+        companyRepository, profileRepository, accessService, clock,
+        mock(AuditTrailService.class));
     Company company = new Company();
     company.setId("company-1");
     company.setTaxId("20123456789");

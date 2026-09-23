@@ -7,6 +7,7 @@ import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.port.out.IssuerTaxProfileRepository;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.IssuerTaxProfile;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +25,7 @@ public class IssuerOnboardingService implements IssuerOnboardingUseCase {
   private final IssuerTaxProfileRepository profileRepository;
   private final CompanyAccessService companyAccessService;
   private final Clock clock;
+  private final AuditTrailService auditTrailService;
 
   @Override
   @Transactional
@@ -42,7 +44,10 @@ public class IssuerOnboardingService implements IssuerOnboardingUseCase {
         companyId, request.taxpayerType(), request.fiscalAddress(), request.ubigeo(),
         request.department(), request.province(), request.district(), request.countryCode(),
         createdAt, now);
-    return toResponse(profileRepository.save(profile));
+    IssuerTaxProfile saved = profileRepository.save(profile);
+    auditTrailService.record(companyId, AuditAction.ISSUER_TAX_PROFILE_CONFIGURED,
+        "ISSUER_TAX_PROFILE", companyId, "SUCCESS", "Issuer tax profile configured");
+    return toResponse(saved);
   }
 
   @Override

@@ -9,6 +9,7 @@ import com.invoiceautomationservice.application.port.in.CustomerUseCase;
 import com.invoiceautomationservice.application.port.out.CustomerRepository;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.mapper.dto.CustomerDomainResponseMapper;
 import java.util.List;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,7 @@ public class CustomerService implements CustomerUseCase {
   private final CustomerRequestDomainMapper domainRequestMapper;
   private final CustomerDomainResponseMapper domainResponseMapper;
   private final CompanyAccessService companyAccessService;
+  private final AuditTrailService auditTrailService;
 
   @Override
   public void create(CreateCustomerRequest createCustomerRequest, String requestedCompanyId) {
@@ -27,6 +29,8 @@ public class CustomerService implements CustomerUseCase {
     var customer = domainRequestMapper.fromRequest(createCustomerRequest);
     customer.setCompanyId(companyId);
     customerRepository.save(customer);
+    auditTrailService.record(companyId, AuditAction.CUSTOMER_CREATED, "CUSTOMER",
+        customer.getId(), "SUCCESS", "Customer registered");
   }
 
   @Override

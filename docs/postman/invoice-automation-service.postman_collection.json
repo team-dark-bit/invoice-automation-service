@@ -751,6 +751,46 @@
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Cancellation is credit note reason 01', () => { const note=pm.response.json().data; pm.expect(note.documentType).to.eql('CREDIT_NOTE'); pm.expect(note.noteReasonCode).to.eql('01'); });"]}}]
         }
       ]
+    },
+    {
+      "name": "Audit",
+      "item": [
+        {
+          "name": "List company audit events",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "X-Company-Id", "value": "{{companyId}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-events?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "audit-events"],
+              "query": [{"key":"page","value":"0"},{"key":"size","value":"20"}]
+            },
+            "description": "Bitácora inmutable de operaciones de la empresa autenticada. Admite action, resourceType, resourceId, from y to."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {"type":"text/javascript","exec":[
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Returns audit page', () => { const page=pm.response.json().data; pm.expect(page.content).to.be.an('array'); pm.expect(page).to.have.property('totalElements'); });"
+            ]}
+          }]
+        },
+        {
+          "name": "Filter document audit events",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "X-Company-Id", "value": "{{companyId}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit-events?resourceType=ELECTRONIC_DOCUMENT&resourceId={{electronicDocumentId}}&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "audit-events"],
+              "query": [{"key":"resourceType","value":"ELECTRONIC_DOCUMENT"},{"key":"resourceId","value":"{{electronicDocumentId}}"},{"key":"page","value":"0"},{"key":"size","value":"20"}]
+            }
+          },
+          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
     }
   ]
 }

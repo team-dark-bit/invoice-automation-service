@@ -26,6 +26,7 @@ import com.invoiceautomationservice.application.dto.response.ElectronicDocumentR
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -50,6 +51,7 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
   private final BillingSubmissionService billingSubmissionService;
   private final ElectronicDocumentRepository electronicDocumentRepository;
   private final Clock clock;
+  private final AuditTrailService auditTrailService;
 
   @Override
   @Transactional
@@ -85,7 +87,10 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
             request.recipientDocumentType(), request.recipientDocumentNumber(),
             request.currency(), items, Instant.now(clock)
     );
-    return responseMapper.toResponse(invoiceDraftRepository.save(draft));
+    InvoiceDraft saved = invoiceDraftRepository.save(draft);
+    auditTrailService.record(saved.companyId(), AuditAction.DRAFT_CREATED, "INVOICE_DRAFT",
+        saved.id(), "SUCCESS", "Draft created");
+    return responseMapper.toResponse(saved);
   }
 
   @Override
@@ -129,7 +134,10 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
         customer.getId(), request.documentType(), request.recipientDocumentType(),
         request.recipientDocumentNumber(), request.currency(), toItems(request.items()),
         Instant.now(clock));
-    return responseMapper.toResponse(invoiceDraftRepository.save(updated));
+    InvoiceDraft saved = invoiceDraftRepository.save(updated);
+    auditTrailService.record(saved.companyId(), AuditAction.DRAFT_UPDATED, "INVOICE_DRAFT",
+        saved.id(), "SUCCESS", "Draft data updated");
+    return responseMapper.toResponse(saved);
   }
 
   @Override
@@ -138,7 +146,10 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     InvoiceDraft draft = invoiceDraftRepository.findById(id);
     companyAccessService.requireAccess(draft.companyId());
     InvoiceDraft approved = draft.approve(Instant.now(clock));
-    return responseMapper.toResponse(invoiceDraftRepository.save(approved));
+    InvoiceDraft saved = invoiceDraftRepository.save(approved);
+    auditTrailService.record(saved.companyId(), AuditAction.DRAFT_APPROVED, "INVOICE_DRAFT",
+        saved.id(), "SUCCESS", "Draft approved");
+    return responseMapper.toResponse(saved);
   }
 
   @Override
@@ -150,7 +161,10 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
       throw new ApplicationException(INVOICE_DRAFT_ALREADY_NUMBERED, id);
     }
     InvoiceDraft cancelled = draft.cancel(Instant.now(clock));
-    return responseMapper.toResponse(invoiceDraftRepository.save(cancelled));
+    InvoiceDraft saved = invoiceDraftRepository.save(cancelled);
+    auditTrailService.record(saved.companyId(), AuditAction.DRAFT_CANCELLED, "INVOICE_DRAFT",
+        saved.id(), "SUCCESS", "Draft cancelled");
+    return responseMapper.toResponse(saved);
   }
 
   @Override
@@ -161,6 +175,9 @@ public class InvoiceDraftService implements InvoiceDraftUseCase {
     }
 
     var completed = billingSubmissionService.submit(prepared.document());
+    auditTrailService.record(completed.companyId(), AuditAction.DOCUMENT_ISSUED,
+        "ELECTRONIC_DOCUMENT", completed.id(), completed.status().name(),
+        completed.providerResponseMessage());
     return electronicDocumentService.toResponse(completed);
   }
 

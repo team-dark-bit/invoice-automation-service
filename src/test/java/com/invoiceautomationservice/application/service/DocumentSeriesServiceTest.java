@@ -14,7 +14,8 @@ class DocumentSeriesServiceTest {
   @Test
   void rejectsReceiptSeriesWithInvoicePrefix() {
     DocumentSeriesService service = new DocumentSeriesService(
-        mock(DocumentSeriesRepository.class), mock(CompanyAccessService.class));
+        mock(DocumentSeriesRepository.class), mock(CompanyAccessService.class),
+        mock(AuditTrailService.class));
 
     assertThatThrownBy(() -> service.configure("company-1",
         new ConfigureDocumentSeriesRequest(InvoiceDocumentType.SALES_RECEIPT, "F001")))

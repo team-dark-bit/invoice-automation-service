@@ -81,7 +81,7 @@ class CreateInvoiceDraftServiceTest {
             draftRepository, companyRepository, mapper, accessService,
             issuerTaxProfileRepository, recipientResolutionService, electronicDocumentService,
             issuancePersistenceService, billingSubmissionService, electronicDocumentRepository,
-            clock
+            clock, mock(AuditTrailService.class)
     );
   }
 

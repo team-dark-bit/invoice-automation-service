@@ -7,6 +7,7 @@ import com.invoiceautomationservice.application.dto.response.DocumentSeriesRespo
 import com.invoiceautomationservice.application.port.out.DocumentSeriesRepository;
 import com.invoiceautomationservice.domain.model.DocumentSeries;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +21,7 @@ public class DocumentSeriesService {
 
   private final DocumentSeriesRepository repository;
   private final CompanyAccessService companyAccessService;
+  private final AuditTrailService auditTrailService;
 
   @Transactional
   public DocumentSeriesResponse configure(
@@ -28,6 +30,8 @@ public class DocumentSeriesService {
     validatePrefix(request.documentType(), request.series());
     DocumentSeries saved = repository.save(new DocumentSeries(
         UUID.randomUUID().toString(), companyId, request.documentType(), request.series(), 0, true));
+    auditTrailService.record(companyId, AuditAction.DOCUMENT_SERIES_CONFIGURED, "DOCUMENT_SERIES",
+        saved.id(), "SUCCESS", saved.documentType() + " " + saved.series());
     return toResponse(saved);
   }
 

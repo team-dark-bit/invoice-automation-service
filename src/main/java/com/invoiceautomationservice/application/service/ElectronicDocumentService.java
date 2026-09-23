@@ -12,6 +12,7 @@ import com.invoiceautomationservice.domain.model.InvoiceItem;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
 import com.invoiceautomationservice.domain.model.CreditNoteReason;
 import com.invoiceautomationservice.domain.model.DebitNoteReason;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class ElectronicDocumentService {
   private final BillingProvider billingProvider;
   private final InvoiceIssuancePersistenceService issuancePersistenceService;
   private final BillingSubmissionService billingSubmissionService;
+  private final AuditTrailService auditTrailService;
 
   @Transactional(readOnly = true)
   public ElectronicDocumentResponse findById(UUID id) {
@@ -56,12 +58,19 @@ public class ElectronicDocumentService {
     }
     ElectronicDocument updated = document.withBillingResult(
         billingProvider.checkStatus(document.providerReference()));
-    return toResponse(repository.save(updated));
+    ElectronicDocument saved = repository.save(updated);
+    auditTrailService.record(saved.companyId(), AuditAction.DOCUMENT_STATUS_REFRESHED,
+        "ELECTRONIC_DOCUMENT", saved.id(), saved.status().name(),
+        saved.providerResponseMessage());
+    return toResponse(saved);
   }
 
   public ElectronicDocumentResponse retry(UUID id) {
     PreparedEmission prepared = issuancePersistenceService.prepareRetry(id);
     ElectronicDocument completed = billingSubmissionService.submit(prepared.document());
+    auditTrailService.record(completed.companyId(), AuditAction.DOCUMENT_RETRIED,
+        "ELECTRONIC_DOCUMENT", completed.id(), completed.status().name(),
+        completed.providerResponseMessage());
     return toResponse(completed);
   }
 
@@ -100,6 +109,14 @@ public class ElectronicDocumentService {
         originalId, type, reasonCode, reason);
     ElectronicDocument result = prepared.submitRequired()
         ? billingSubmissionService.submit(prepared.document()) : prepared.document();
+    AuditAction action = type == InvoiceDocumentType.CREDIT_NOTE
+        ? AuditAction.CREDIT_NOTE_ISSUED : AuditAction.DEBIT_NOTE_ISSUED;
+    if (type == InvoiceDocumentType.CREDIT_NOTE
+        && CreditNoteReason.OPERATION_CANCELLATION.code().equals(reasonCode)) {
+      action = AuditAction.DOCUMENT_CANCELLED;
+    }
+    auditTrailService.record(result.companyId(), action, "ELECTRONIC_DOCUMENT", result.id(),
+        result.status().name(), "Original document: " + originalId + "; reason: " + reasonCode);
     return toResponse(result);
   }
 

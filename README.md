@@ -213,6 +213,14 @@ Cada operación conserva el snapshot del emisor, receptor, moneda, ítems e impu
 
 La migración `V18__add_credit_debit_notes.sql` habilita los tipos `07`/`08`, referencias tributarias y restricciones de integridad. En esta etapa el proveedor mock acepta las notas; la comunicación real con NUBEFACT se realizará a través del mismo `BillingProvider`.
 
+### Auditoría
+
+Las operaciones de negocio dejan una bitácora inmutable y separada de las entidades operativas. Cada evento conserva la empresa, el usuario autenticado, la acción, el tipo e identificador del recurso, el resultado, un detalle funcional y la fecha UTC. Se auditan la creación de empresas y clientes, el onboarding tributario, la configuración de series; creación, edición, aprobación y cancelación de borradores; emisión y reintento de comprobantes; sincronización con el proveedor; notas de crédito, débito y anulaciones.
+
+`GET /api/v1/audit-events` devuelve únicamente eventos de una empresa accesible para el usuario. Acepta `X-Company-Id` y los filtros opcionales `action`, `resourceType`, `resourceId`, `from`, `to`, `page` y `size`. Las fechas usan ISO-8601, por ejemplo `2026-09-01T00:00:00Z`.
+
+La migración `V19__create_audit_events.sql` crea los índices de consulta y un trigger que rechaza cualquier `UPDATE` o `DELETE`, haciendo que la bitácora sea append-only incluso ante un acceso accidental desde la aplicación.
+
 ### Envío y aceptación del proveedor
 
 El comprobante mantiene un estado de entrega independiente: `PENDING_SEND`, `SENDING`, `SENT`, `ACCEPTED`, `REJECTED` o `ERROR`. También conserva la referencia, fechas de envío y respuesta, código y mensaje devueltos por el proveedor. Los datos fiscales permanecen inmutables mientras estos metadatos evolucionan.

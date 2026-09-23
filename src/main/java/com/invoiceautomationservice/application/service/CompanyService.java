@@ -9,6 +9,7 @@ import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.service.mapper.CompanyDomainResponseMapper;
 import com.invoiceautomationservice.application.service.mapper.CompanyRequestDomainMapper;
 import java.util.List;
+import com.invoiceautomationservice.domain.model.AuditAction;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,12 +22,15 @@ public class CompanyService implements CompanyUseCase {
   private final CompanyRequestDomainMapper requestMapper;
   private final CompanyDomainResponseMapper responseMapper;
   private final CompanyAccessService companyAccessService;
+  private final AuditTrailService auditTrailService;
 
   @Override
   @Transactional
   public CompanyResponse create(CreateCompanyRequest request) {
     var company = companyRepository.save(requestMapper.fromRequest(request));
     companyAccessService.associateCurrentUser(company.getId());
+    auditTrailService.record(company.getId(), AuditAction.COMPANY_CREATED, "COMPANY",
+        company.getId(), "SUCCESS", "Company registered and associated with current user");
     return responseMapper.toResponse(company);
   }
 

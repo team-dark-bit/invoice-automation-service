@@ -29,7 +29,8 @@ class CompanyServiceTest {
     requestMapper = mock(CompanyRequestDomainMapper.class);
     responseMapper = mock(CompanyDomainResponseMapper.class);
     accessService = mock(CompanyAccessService.class);
-    service = new CompanyService(repository, requestMapper, responseMapper, accessService);
+    service = new CompanyService(repository, requestMapper, responseMapper, accessService,
+        mock(AuditTrailService.class));
   }
 
   @Test

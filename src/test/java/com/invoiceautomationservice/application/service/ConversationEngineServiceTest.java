@@ -16,6 +16,7 @@ import com.invoiceautomationservice.domain.model.Conversation;
 import com.invoiceautomationservice.domain.model.ConversationChannel;
 import com.invoiceautomationservice.domain.model.ConversationContext;
 import com.invoiceautomationservice.domain.model.ConversationFlowState;
+import com.invoiceautomationservice.infrastructure.adapter.out.interpretation.RuleBasedDocumentUnderstandingProvider;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -51,7 +52,8 @@ class ConversationEngineServiceTest {
       return value;
     });
     engine = new ConversationEngineService(conversations, contexts, messages, drafts, access,
-        new ConversationCommandParser(), mock(AuditTrailService.class),
+        new ConversationCommandParser(), new RuleBasedDocumentUnderstandingProvider(),
+        mock(AuditTrailService.class),
         Clock.fixed(Instant.parse("2026-09-23T15:00:00Z"), ZoneOffset.UTC));
   }
 
@@ -76,5 +78,45 @@ class ConversationEngineServiceTest {
     var result = engine.process(conversation.id(), "texto libre", "m1");
     assertThat(result.reply()).contains("No entendí").contains("NUEVA BOLETA");
     assertThat(result.context().state()).isEqualTo(ConversationFlowState.EMPTY);
+  }
+
+  @Test
+  void accumulatesNaturalLanguageItemsAndCalculatesTotal() {
+    var started = engine.process(conversation.id(),
+        "Quiero una boleta para DNI 12345678", "n1");
+    var firstItem = engine.process(conversation.id(),
+        "Leche Gloria, dos unidades a 3.50", "n2");
+    var secondItem = engine.process(conversation.id(),
+        "Agrega tres panes a un sol", "n3");
+
+    assertThat(started.context().state()).isEqualTo(ConversationFlowState.COLLECTING_ITEMS);
+    assertThat(firstItem.context().itemCount()).isEqualTo(1);
+    assertThat(secondItem.context().itemCount()).isEqualTo(2);
+    assertThat(secondItem.reply()).contains("Total acumulado PEN 10.00");
+  }
+
+  @Test
+  void keepsPartialHeaderAndRequestsMissingRecipient() {
+    var partial = engine.process(conversation.id(), "Quiero una boleta", "p1");
+    var completed = engine.process(conversation.id(), "DNI 12345678", "p2");
+
+    assertThat(partial.context().state()).isEqualTo(ConversationFlowState.EMPTY);
+    assertThat(partial.context().documentType()).isNotNull();
+    assertThat(partial.reply()).contains("Falta indicar").contains("DNI o RUC");
+    assertThat(completed.context().state()).isEqualTo(ConversationFlowState.COLLECTING_ITEMS);
+    assertThat(completed.context().recipientDocumentNumber()).isEqualTo("12345678");
+  }
+
+  @Test
+  void warnsWhenReportedTotalDoesNotMatchBackendCalculation() {
+    engine.process(conversation.id(), "Quiero una boleta para DNI 12345678", "w1");
+
+    var result = engine.process(conversation.id(),
+        "Leche Gloria, dos unidades, precio unitario 3.50 total = 8", "w2");
+
+    assertThat(result.context().itemCount()).isEqualTo(1);
+    assertThat(result.reply()).contains("Advertencia")
+        .contains("no coincide con el total calculado 7.00")
+        .contains("Se usará el total calculado");
   }
 }

@@ -1133,6 +1133,72 @@
           }]
         }
       ]
+    },
+    {
+      "name": "Natural Language without AI",
+      "item": [
+        {
+          "name": "Create natural-language conversation",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}, {"key": "X-Company-Id", "value": "{{companyId}}"}],
+            "body": {"mode": "raw", "raw": "{\n  \"customerId\": null,\n  \"invoiceDraftId\": null,\n  \"channel\": \"REST\",\n  \"externalParticipantId\": \"postman-natural-language\"\n}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations"]},
+            "description": "Inicia un flujo independiente para probar texto natural sin IA externa."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "if (pm.response.code === 201) pm.environment.set('conversationId', pm.response.json().data.id);"]}}]
+        },
+        {
+          "name": "Natural - Start receipt",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"text\":\"Quiero una boleta para DNI {{recipientDocumentNumber}}\",\"externalMessageId\":\"natural-start-1\"}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Natural header was understood', () => pm.expect(pm.response.json().data.context.state).to.eql('COLLECTING_ITEMS'));"]}}]
+        },
+        {
+          "name": "Natural - Add milk",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"text\":\"Leche Gloria, dos unidades a 3.50\",\"externalMessageId\":\"natural-item-1\"}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('First natural item was added', () => { const data = pm.response.json().data; pm.expect(data.context.itemCount).to.eql(1); pm.expect(data.reply).to.include('PEN 7.00'); });"]}}]
+        },
+        {
+          "name": "Natural - Add breads and accumulate",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"text\":\"Agrega tres panes a un sol\",\"externalMessageId\":\"natural-item-2\"}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Items and total were accumulated', () => { const data = pm.response.json().data; pm.expect(data.context.itemCount).to.eql(2); pm.expect(data.reply).to.include('PEN 10.00'); });"]}}]
+        },
+        {
+          "name": "Natural - Summary using deterministic command",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"text\":\"RESUMEN\",\"externalMessageId\":\"natural-summary-1\"}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]},
+            "description": "Demuestra que los comandos exactos siguen disponibles dentro del flujo natural."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Summary uses backend total', () => pm.expect(pm.response.json().data.reply).to.include('PEN 10.00'));"]}}]
+        },
+        {
+          "name": "Close natural-language conversation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/close", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "close"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Natural conversation is closed', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"]}}]
+        }
+      ]
     }
   ]
 }

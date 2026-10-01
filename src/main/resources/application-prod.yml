@@ -17,8 +17,8 @@ recipient:
   lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}
 
 ai:
-  provider: ${AI_PROVIDER:mock}
-  model: ${AI_MODEL:mock}
+  provider: ${AI_PROVIDER:rules}
+  model: ${AI_MODEL:rules}
 
 logging:
   level:

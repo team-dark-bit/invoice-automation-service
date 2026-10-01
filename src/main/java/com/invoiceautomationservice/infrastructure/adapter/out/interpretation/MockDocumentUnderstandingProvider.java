@@ -9,15 +9,12 @@ import java.util.Objects;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-/**
- * Safe default used until a deterministic or multimodal interpreter is configured.
- */
+/** Fallback explicitly selectable when interpretation must be disabled. */
 @Component
 @ConditionalOnProperty(
     prefix = "ai",
     name = "provider",
-    havingValue = "mock",
-    matchIfMissing = true)
+    havingValue = "mock")
 public class MockDocumentUnderstandingProvider implements DocumentUnderstandingProvider {
   private static final String WARNING =
       "Mock provider does not interpret content; manual review is required";

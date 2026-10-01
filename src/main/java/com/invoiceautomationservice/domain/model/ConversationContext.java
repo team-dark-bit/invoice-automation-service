@@ -30,6 +30,23 @@ public record ConversationContext(
         identityType, documentNumber, newCurrency, List.of(), null, now);
   }
 
+  public ConversationContext collectHeader(
+      InvoiceDocumentType type, IdentityDocumentType identityType,
+      String documentNumber, String newCurrency, Instant now) {
+    InvoiceDocumentType mergedType = type == null ? documentType : type;
+    IdentityDocumentType mergedIdentity = identityType == null
+        ? recipientDocumentType : identityType;
+    String mergedNumber = documentNumber == null || documentNumber.isBlank()
+        ? recipientDocumentNumber : documentNumber.strip();
+    String mergedCurrency = newCurrency == null || newCurrency.isBlank()
+        ? currency : newCurrency.strip().toUpperCase(java.util.Locale.ROOT);
+    boolean complete = mergedType != null && mergedIdentity != null && mergedNumber != null;
+    ConversationFlowState nextState = complete
+        ? ConversationFlowState.COLLECTING_ITEMS : ConversationFlowState.EMPTY;
+    return new ConversationContext(conversationId, nextState, mergedType, mergedIdentity,
+        mergedNumber, mergedCurrency, items, null, now);
+  }
+
   public ConversationContext addItem(ConversationDraftItem item, Instant now) {
     ensureCollecting();
     var updated = new java.util.ArrayList<>(items);

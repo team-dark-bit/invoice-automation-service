@@ -299,7 +299,7 @@ El acceso usa `CONVERSATION_READ` y `CONVERSATION_MANAGE`: `OWNER` y `ADMIN` pos
 
 El caso de uso `ConversationEngineUseCase` recibe únicamente `conversationId`, texto e identificador externo; no conoce HTTP, WhatsApp ni ningún SDK. Cada adaptador de canal puede entregar el mismo comando al motor y utilizar la respuesta textual. `POST /api/v1/conversations/{id}/process` es el adaptador REST disponible para pruebas.
 
-El flujo determinista, todavía sin IA, acepta:
+El flujo determinista mantiene estos comandos exactos como alternativa:
 
 - `NUEVA BOLETA DNI 12345678 PEN`
 - `NUEVA FACTURA RUC 20123456789 PEN`
@@ -313,13 +313,23 @@ El motor guarda el mensaje entrante y su respuesta, mantiene el contexto `EMPTY`
 
 `externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
+El mismo endpoint también admite texto natural mediante reglas locales, sin consumir una API de IA. Por ejemplo:
+
+- `Quiero una boleta para DNI 12345678`
+- `Leche Gloria, dos unidades a 3.50`
+- `Agrega tres panes a un sol`
+
+El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantidad y precio unitario. Acepta números en cifras o palabras en español, incluyendo formas como `treinta y dos` y precios como `tres con cincuenta soles`. Los productos de mensajes sucesivos se acumulan en el contexto persistido y cada respuesta informa el total recalculado por el backend. Si faltan tipo de comprobante, receptor, cantidad o precio, el motor solicita esos datos sin inventarlos. Si el usuario incluye un `total` distinto de cantidad por precio, conserva el ítem pero advierte la diferencia y utiliza su propio cálculo.
+
+Estas reglas cubren formatos controlados; no pretenden comprender cualquier redacción. Ante un mensaje no reconocido, la respuesta incluye los comandos exactos disponibles, que siguen teniendo prioridad sobre la interpretación natural.
+
 ### Contrato unificado de interpretación
 
 El puerto de salida `DocumentUnderstandingProvider` desacopla el motor conversacional del proveedor de IA u OCR. Expone entradas separadas para texto e imagen, pero ambas producen el mismo `DocumentInterpretation`. Cada solicitud conserva `companyId`, `conversationId` y un `InterpretationContextSnapshot` con los datos ya reunidos, permitiendo interpretaciones multi-turno sin entregar entidades JPA al proveedor.
 
 El resultado neutral contiene intención, tipo de comprobante, receptor, moneda, ítems candidatos, total reportado, confianza entre 0 y 1, campos faltantes y advertencias. Los ítems admiten datos parciales para solicitar aclaraciones posteriormente; las colecciones y el contenido binario se copian defensivamente. Una interpretación es solo una propuesta: no crea, aprueba ni emite comprobantes y los totales siempre deberán recalcularse con las reglas del dominio.
 
-`AI_PROVIDER` selecciona el adaptador y usa `mock` por defecto; `AI_MODEL` reserva el modelo que usará el adaptador real. `MockDocumentUnderstandingProvider` responde `UNKNOWN` con confianza cero y revisión manual requerida, evitando fingir resultados mientras todavía no existe una integración de IA. Este punto no agrega endpoints: los casos de uso para texto natural y carga de imágenes se incorporan en los siguientes incrementos.
+`AI_PROVIDER` selecciona el adaptador y usa `rules` por defecto. Este adaptador interpreta texto con reglas deterministas y no realiza llamadas externas. Puede establecerse `AI_PROVIDER=mock` para deshabilitar la interpretación y responder `UNKNOWN` con revisión manual. `AI_MODEL` queda reservado para el futuro adaptador multimodal real. La interpretación de imágenes todavía responde como no soportada.
 
 ### Pruebas de integración y concurrencia
 
@@ -509,5 +519,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 14. Configuración segura, correlación, salud y métricas.
 15. README, environment y colección Postman alineados con la implementación.
 16. Contrato unificado y neutral para interpretar texto e imágenes.
+17. Interpretación determinista de texto natural, acumulación y validación de totales.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: interpretación determinista de texto libre; recepción y almacenamiento seguro de imágenes; adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: recepción y almacenamiento seguro de imágenes; adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

@@ -16,6 +16,10 @@ billing:
 recipient:
   lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}
 
+ai:
+  provider: ${AI_PROVIDER:mock}
+  model: ${AI_MODEL:mock}
+
 logging:
   level:
     root: INFO

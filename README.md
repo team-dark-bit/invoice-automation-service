@@ -313,6 +313,14 @@ El motor guarda el mensaje entrante y su respuesta, mantiene el contexto `EMPTY`
 
 `externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
+### Contrato unificado de interpretación
+
+El puerto de salida `DocumentUnderstandingProvider` desacopla el motor conversacional del proveedor de IA u OCR. Expone entradas separadas para texto e imagen, pero ambas producen el mismo `DocumentInterpretation`. Cada solicitud conserva `companyId`, `conversationId` y un `InterpretationContextSnapshot` con los datos ya reunidos, permitiendo interpretaciones multi-turno sin entregar entidades JPA al proveedor.
+
+El resultado neutral contiene intención, tipo de comprobante, receptor, moneda, ítems candidatos, total reportado, confianza entre 0 y 1, campos faltantes y advertencias. Los ítems admiten datos parciales para solicitar aclaraciones posteriormente; las colecciones y el contenido binario se copian defensivamente. Una interpretación es solo una propuesta: no crea, aprueba ni emite comprobantes y los totales siempre deberán recalcularse con las reglas del dominio.
+
+`AI_PROVIDER` selecciona el adaptador y usa `mock` por defecto; `AI_MODEL` reserva el modelo que usará el adaptador real. `MockDocumentUnderstandingProvider` responde `UNKNOWN` con confianza cero y revisión manual requerida, evitando fingir resultados mientras todavía no existe una integración de IA. Este punto no agrega endpoints: los casos de uso para texto natural y carga de imágenes se incorporan en los siguientes incrementos.
+
 ### Pruebas de integración y concurrencia
 
 La suite rápida continúa ejecutándose con `./mvnw test` (`.\\mvnw.cmd test` en Windows). Las pruebas `*IT` se ejecutan con `./mvnw verify` y utilizan Testcontainers para crear un PostgreSQL 17 temporal y descartable; requieren que Docker esté activo y no utilizan ni modifican la base local del desarrollador.
@@ -500,5 +508,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 13. Pruebas de integración y concurrencia con PostgreSQL real.
 14. Configuración segura, correlación, salud y métricas.
 15. README, environment y colección Postman alineados con la implementación.
+16. Contrato unificado y neutral para interpretar texto e imágenes.
 
-Los siguientes trabajos corresponden a integraciones, no a carencias del núcleo actual: adaptador HTTP y credenciales por empresa para NUBEFACT; proveedor real de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; interpretación con IA/OCR; almacenamiento de archivos; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: interpretación determinista de texto libre; recepción y almacenamiento seguro de imágenes; adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

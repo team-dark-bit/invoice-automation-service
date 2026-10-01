@@ -44,3 +44,6 @@ billing:
   provider: ${BILLING_PROVIDER:mock}
 recipient:
   lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}
+ai:
+  provider: ${AI_PROVIDER:mock}
+  model: ${AI_MODEL:mock}

@@ -1199,6 +1199,77 @@
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Natural conversation is closed', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"]}}]
         }
       ]
+    },
+    {
+      "name": "Conversation Images",
+      "description": "Configure imagePath en el environment con un JPEG, PNG o WebP local válido antes de ejecutar esta carpeta.",
+      "item": [
+        {
+          "name": "Create image conversation",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}, {"key": "X-Company-Id", "value": "{{companyId}}"}],
+            "body": {"mode": "raw", "raw": "{\n  \"customerId\": null,\n  \"invoiceDraftId\": null,\n  \"channel\": \"REST\",\n  \"externalParticipantId\": \"postman-image-upload\"\n}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "if (pm.response.code === 201) pm.environment.set('conversationId', pm.response.json().data.id);"]}}]
+        },
+        {
+          "name": "Upload validated image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {"mode": "formdata", "formdata": [
+              {"key": "file", "type": "file", "src": "{{imagePath}}"},
+              {"key": "externalMessageId", "value": "postman-image-1", "type": "text"},
+              {"key": "retentionPolicy", "value": "TEMPORARY", "type": "text"},
+              {"key": "retentionDays", "value": "30", "type": "text"}
+            ]},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "pm.test('Image metadata is valid', () => { const data = pm.response.json().data; pm.expect(data.sha256).to.match(/^[a-f0-9]{64}$/); pm.expect(data.duplicate).to.eql(false); pm.environment.set('conversationImageId', data.id); });"]}}]
+        },
+        {
+          "name": "Prevent duplicate image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {"mode": "formdata", "formdata": [
+              {"key": "file", "type": "file", "src": "{{imagePath}}"},
+              {"key": "externalMessageId", "value": "postman-image-duplicate", "type": "text"},
+              {"key": "retentionPolicy", "value": "TEMPORARY", "type": "text"},
+              {"key": "retentionDays", "value": "30", "type": "text"}
+            ]},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Duplicate returned existing image', () => { const data = pm.response.json().data; pm.expect(data.duplicate).to.eql(true); pm.expect(data.id).to.eql(pm.environment.get('conversationImageId')); });"]}}]
+        },
+        {
+          "name": "Get image metadata",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Image is active', () => pm.expect(pm.response.json().data.deletedAt).to.eql(null));"]}}]
+        },
+        {
+          "name": "Download image content",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}/content", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}", "content"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Returns an allowed image type', () => pm.expect(['image/jpeg','image/png','image/webp']).to.include(pm.response.headers.get('Content-Type')));"]}}]
+        },
+        {
+          "name": "Delete retained image",
+          "request": {"method": "DELETE", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 204', () => pm.response.to.have.status(204));"]}}]
+        },
+        {
+          "name": "Deleted image content is gone",
+          "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}/content", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}", "content"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 410', () => pm.response.to.have.status(410));"]}}]
+        },
+        {
+          "name": "Close image conversation",
+          "request": {"method": "POST", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/close", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "close"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        }
+      ]
     }
   ]
 }

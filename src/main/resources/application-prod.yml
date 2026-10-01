@@ -20,6 +20,10 @@ ai:
   provider: ${AI_PROVIDER:rules}
   model: ${AI_MODEL:rules}
 
+image-storage:
+  provider: ${IMAGE_STORAGE_PROVIDER:local}
+  root: ${IMAGE_STORAGE_ROOT:/app/data/images}
+
 logging:
   level:
     root: INFO

@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -51,6 +52,15 @@ public class GlobalExceptionHandler {
       ApiResponse<Void> response = ApiResponse.failure(
           HttpStatus.CONFLICT.value(), "Invalid state", List.of(ex.getMessage()));
       return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(
+        MaxUploadSizeExceededException ex) {
+      ApiResponse<Void> response = ApiResponse.failure(
+          HttpStatus.PAYLOAD_TOO_LARGE.value(), "Image too large",
+          List.of("The multipart request exceeds the configured image size limit"));
+      return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(response);
     }
 
 }

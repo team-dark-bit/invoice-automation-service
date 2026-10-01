@@ -1,6 +1,6 @@
 # Invoice Automation Service
 
-Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST o desde un motor conversacional independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, observabilidad y pruebas con PostgreSQL real.
+Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST o desde un motor conversacional independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, recepción segura de imágenes, observabilidad y pruebas con PostgreSQL real.
 
 La emisión utiliza actualmente `MockBillingProvider`. La integración HTTP con NUBEFACT, el webhook de WhatsApp, la consulta real de DNI/RUC y OCR/IA todavía son adaptadores pendientes; el dominio y sus puertos ya están preparados para incorporarlos sin trasladar lógica de negocio a los controladores.
 
@@ -39,7 +39,7 @@ docker compose up -d postgres
 .\mvnw.cmd spring-boot:run
 ```
 
-La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER` y `RECIPIENT_LOOKUP_PROVIDER`.
+La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER` y las variables `IMAGE_*` descritas en la sección de imágenes.
 
 Credenciales sembradas exclusivamente para desarrollo:
 
@@ -121,6 +121,7 @@ Cada respuesta devuelve `X-Correlation-Id`, que permite relacionar la operación
 | Notas y anulación | `POST .../{id}/credit-notes`, `.../debit-notes`, `.../cancel` |
 | Auditoría | `GET /api/v1/audit-events` |
 | Conversaciones | `POST/GET /api/v1/conversations`, `GET .../{id}`, `POST/GET .../{id}/messages`, `POST .../{id}/process`, `.../close` |
+| Imágenes | `POST /api/v1/conversations/{id}/images`, `GET/DELETE .../images/{imageId}`, `GET .../images/{imageId}/content` |
 | Operación | `GET /actuator/health`, `/health/liveness`, `/health/readiness`, `/info`, `/metrics`, `/prometheus` |
 
 Los filtros exactos, cuerpos, ejemplos y pruebas automáticas están versionados en la colección Postman y también pueden explorarse desde OpenAPI.
@@ -132,7 +133,9 @@ Importe estos dos archivos y seleccione `Invoice Automation Service - Local`:
 - `docs/postman/invoice-automation-service.postman_collection.json`
 - `docs/postman/local.postman_environment.json`
 
-La colección hereda el bearer token, lo captura durante `Login and capture JWT` y propaga los IDs generados entre carpetas. El orden versionado recorre salud, autenticación, empresas, configuración tributaria, clientes/receptores, borradores, emisión idempotente, búsquedas, notas, auditoría, onboarding/miembros y conversaciones. También comprueba casos negativos como cancelar un borrador ya numerado y reintentar un documento en estado definitivo.
+La colección hereda el bearer token, lo captura durante `Login and capture JWT` y propaga los IDs generados entre carpetas. El orden versionado recorre salud, autenticación, empresas, configuración tributaria, clientes/receptores, borradores, emisión idempotente, búsquedas, notas, auditoría, onboarding/miembros, conversaciones e imágenes. También comprueba casos negativos como cancelar un borrador ya numerado y reintentar un documento en estado definitivo.
+
+Para ejecutar la carpeta `Conversation Images`, establezca `imagePath` en el environment con la ruta local de un JPEG, PNG o WebP válido y permita a Postman leer archivos desde ese directorio. El flujo crea su propia conversación, carga el archivo, verifica la deduplicación, consulta el contenido y finalmente lo elimina.
 
 Los RUC, DNI, usuarios, correos e identificadores externos de prueba se generan dinámicamente, por lo que la colección puede volver a ejecutarse sobre la misma base. Las operaciones que demuestran escenarios opcionales aceptan explícitamente los códigos esperados cuando la precondición no existe. No use las credenciales ni secretos locales en ambientes compartidos.
 
@@ -322,6 +325,22 @@ El mismo endpoint también admite texto natural mediante reglas locales, sin con
 El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantidad y precio unitario. Acepta números en cifras o palabras en español, incluyendo formas como `treinta y dos` y precios como `tres con cincuenta soles`. Los productos de mensajes sucesivos se acumulan en el contexto persistido y cada respuesta informa el total recalculado por el backend. Si faltan tipo de comprobante, receptor, cantidad o precio, el motor solicita esos datos sin inventarlos. Si el usuario incluye un `total` distinto de cantidad por precio, conserva el ítem pero advierte la diferencia y utiliza su propio cálculo.
 
 Estas reglas cubren formatos controlados; no pretenden comprender cualquier redacción. Ante un mensaje no reconocido, la respuesta incluye los comandos exactos disponibles, que siguen teniendo prioridad sobre la interpretación natural.
+
+### Recepción y almacenamiento de imágenes
+
+`POST /api/v1/conversations/{id}/images` recibe `multipart/form-data`. La parte obligatoria `file` admite JPEG, PNG y WebP; opcionalmente acepta `externalMessageId`, `retentionPolicy=TEMPORARY|PERMANENT` y `retentionDays`. Una carga nueva responde `201`; si el mismo contenido ya existe activo en la conversación, devuelve el recurso existente con `200` y `duplicate=true`, sin crear otro mensaje ni otro archivo.
+
+La validación usa el contenido binario y no la extensión proporcionada. Comprueba firma, estructura, tipo declarado, tamaño y dimensiones. JPEG y PNG también deben poder decodificarse; WebP estático valida el contenedor RIFF, el lienzo VP8X cuando existe y un bloque de imagen VP8/VP8L real. El SHA-256 y el índice único parcial de PostgreSQL impiden duplicados activos por conversación. El nombre original solo se conserva saneado como metadato; el nombre físico es un UUID generado internamente.
+
+Los demás endpoints son:
+
+- `GET /api/v1/conversations/{id}/images/{imageId}`: metadatos y retención.
+- `GET /api/v1/conversations/{id}/images/{imageId}/content`: contenido autenticado, sin caché pública.
+- `DELETE /api/v1/conversations/{id}/images/{imageId}`: eliminación manual del binario y marcado del metadato.
+
+`ImageStoragePort` mantiene el caso de uso independiente del proveedor. El adaptador `local` escribe de forma atómica bajo `IMAGE_STORAGE_ROOT` (`./data/images` en desarrollo); un adaptador S3, Azure Blob u otro puede reemplazarlo mediante `IMAGE_STORAGE_PROVIDER` sin cambiar el controlador. No se expone la ruta física en respuestas ni mensajes.
+
+Las imágenes temporales usan 30 días por defecto y una tarea diaria elimina las vencidas; las permanentes no admiten `retentionDays`. Se configuran con `IMAGE_MAX_SIZE_BYTES`, `IMAGE_MAX_WIDTH`, `IMAGE_MAX_HEIGHT`, `IMAGE_DEFAULT_RETENTION_DAYS`, `IMAGE_MAX_RETENTION_DAYS` e `IMAGE_CLEANUP_CRON`. Spring limita además el multipart con `IMAGE_MULTIPART_MAX_SIZE` y `IMAGE_MULTIPART_MAX_REQUEST_SIZE`. En contenedores debe montarse `IMAGE_STORAGE_ROOT` en un volumen persistente; para producción distribuida se recomienda implementar el puerto con almacenamiento de objetos.
 
 ### Contrato unificado de interpretación
 
@@ -520,5 +539,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 15. README, environment y colección Postman alineados con la implementación.
 16. Contrato unificado y neutral para interpretar texto e imágenes.
 17. Interpretación determinista de texto natural, acumulación y validación de totales.
+18. Recepción, validación, deduplicación, retención y almacenamiento de imágenes.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: recepción y almacenamiento seguro de imágenes; adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

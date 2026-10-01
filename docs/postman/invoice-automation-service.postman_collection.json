@@ -2,14 +2,19 @@
   "info": {
     "_postman_id": "52b69070-38a2-4ec8-977d-c826106d0f7c",
     "name": "Invoice Automation Service",
-    "description": "Colección versionada para probar autenticación, aislamiento multiempresa, tributación de borradores, series y emisión de comprobantes. Ejecute primero Login para capturar el JWT y luego las carpetas en el orden mostrado.",
+    "description": "Suite funcional versionada del servicio: observabilidad, JWT, multiempresa, onboarding tributario, receptores, borradores, emisión, notas, auditoría, roles y conversaciones. Ejecute la colección completa en el orden mostrado con el environment local seleccionado.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
     { "key": "accessToken", "value": "", "type": "string" },
     { "key": "adminUsername", "value": "haroldqc", "type": "string" },
-    { "key": "adminPassword", "value": "password", "type": "string" }
+    { "key": "adminPassword", "value": "password", "type": "string" },
+    { "key": "onboardingUsername", "value": "", "type": "string" },
+    { "key": "onboardingEmail", "value": "", "type": "string" },
+    { "key": "onboardingTaxId", "value": "", "type": "string" },
+    { "key": "memberUsername", "value": "", "type": "string" },
+    { "key": "memberEmail", "value": "", "type": "string" }
   ],
   "auth": {
     "type": "bearer",
@@ -44,6 +49,30 @@
               }
             }
           ]
+        },
+        {
+          "name": "Application info",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "info"]
+            },
+            "description": "Metadatos públicos de nombre, descripción y versión de la aplicación."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Application metadata is present', () => pm.expect(pm.response.json().app.name).to.eql('invoice-automation-service'));"
+              ]
+            }
+          }]
         },
         {
           "name": "Liveness probe",
@@ -170,6 +199,29 @@
               "exec": [
                 "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
                 "pm.test('Prometheus payload', () => pm.expect(pm.response.text()).to.include('application_ready_time_seconds'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Actuator metrics catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics"]
+            },
+            "description": "Catálogo de métricas protegido con el JWT de la colección."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Metric names returned', () => pm.expect(pm.response.json().names).to.be.an('array'));"
               ]
             }
           }]
@@ -865,24 +917,70 @@
       "item": [
         {
           "name": "Public owner onboarding",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now().toString();",
+                  "pm.environment.set('onboardingUsername', `owner.${suffix}`);",
+                  "pm.environment.set('onboardingEmail', `owner.${suffix}@example.com`);",
+                  "pm.environment.set('onboardingTaxId', `20${suffix.slice(-9)}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Owner tenant was created', () => { const data = pm.response.json().data; pm.expect(data.owner.username).to.eql(pm.environment.get('onboardingUsername')); pm.expect(data.company.id).to.be.a('string').and.not.empty; });"
+                ]
+              }
+            }
+          ],
           "request": {
+            "auth": { "type": "noauth" },
             "method": "POST",
             "header": [{"key":"Content-Type","value":"application/json"}],
-            "body": {"mode":"raw","raw":"{\n  \"fullName\": \"New Owner\",\n  \"username\": \"newowner\",\n  \"email\": \"newowner@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"company\": {\n    \"legalName\": \"New Company SAC\",\n    \"tradeName\": \"New Company\",\n    \"taxId\": \"20123456789\",\n    \"address\": \"Lima\"\n  }\n}","options":{"raw":{"language":"json"}}},
+            "body": {"mode":"raw","raw":"{\n  \"fullName\": \"New Owner\",\n  \"username\": \"{{onboardingUsername}}\",\n  \"email\": \"{{onboardingEmail}}\",\n  \"password\": \"ChangeMe123!\",\n  \"company\": {\n    \"legalName\": \"New Company SAC {{onboardingTaxId}}\",\n    \"tradeName\": \"New Company\",\n    \"taxId\": \"{{onboardingTaxId}}\",\n    \"address\": \"Lima\"\n  }\n}","options":{"raw":{"language":"json"}}},
             "url": {"raw":"{{baseUrl}}/api/v1/onboarding","host":["{{baseUrl}}"],"path":["api","v1","onboarding"]},
-            "description": "Registro público inicial. Use credenciales únicas o cambie el ejemplo antes de ejecutar."
-          },
-          "event": [{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));"]}}]
+            "description": "Registro público inicial con usuario, correo y RUC dinámicos para admitir ejecuciones repetidas."
+          }
         },
         {
           "name": "Add billing member",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const suffix = Date.now().toString();",
+                  "pm.environment.set('memberUsername', `billing.${suffix}`);",
+                  "pm.environment.set('memberEmail', `billing.${suffix}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) pm.environment.set('memberUserId', pm.response.json().data.userId);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method":"POST",
             "header":[{"key":"Content-Type","value":"application/json"}],
-            "body":{"mode":"raw","raw":"{\"fullName\":\"Billing Operator\",\"username\":\"billing.operator\",\"email\":\"billing@example.com\",\"password\":\"ChangeMe123!\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},
+            "body":{"mode":"raw","raw":"{\"fullName\":\"Billing Operator\",\"username\":\"{{memberUsername}}\",\"email\":\"{{memberEmail}}\",\"password\":\"ChangeMe123!\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},
             "url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members"]}
-          },
-          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.environment.set('memberUserId', pm.response.json().data.userId);"]}}]
+          }
         },
         {
           "name": "List company members",
@@ -891,8 +989,8 @@
         },
         {
           "name": "Associate existing user",
-          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"username\":\"existing.user\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members/existing","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members","existing"]},"description":"Asocia a esta empresa un usuario que ya se registró en otra empresa."},
-          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201 or expected validation error', () => pm.expect([201,404,409]).to.include(pm.response.code));"]}}]
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"username\":\"{{onboardingUsername}}\",\"role\":\"BILLING\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members/existing","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members","existing"]},"description":"Asocia a la empresa principal el usuario creado por el onboarding anterior, sin duplicar sus credenciales."},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","pm.test('Existing user was associated', () => pm.expect(pm.response.json().data.username).to.eql(pm.environment.get('onboardingUsername')));"]}}]
         },
         {
           "name": "List company members (after association)",
@@ -902,7 +1000,27 @@
         {
           "name": "Change member role",
           "request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"role\":\"VIEWER\",\"enabled\":true}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/companies/{{companyId}}/members/{{memberUserId}}","host":["{{baseUrl}}"],"path":["api","v1","companies","{{companyId}}","members","{{memberUserId}}"]}},
-          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Role changed to VIEWER', () => pm.expect(pm.response.json().data.role).to.eql('VIEWER'));"]}}]
+        },
+        {
+          "name": "Remove company member",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/members/{{memberUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "members", "{{memberUserId}}"]
+            },
+            "description": "Desactiva la membresía de prueba sin eliminar al usuario global."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('HTTP 204', () => pm.response.to.have.status(204));"]
+            }
+          }]
         }
       ]
     },
@@ -918,6 +1036,28 @@
             "url":{"raw":"{{baseUrl}}/api/v1/conversations","host":["{{baseUrl}}"],"path":["api","v1","conversations"]}
           },
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 201', () => pm.response.to.have.status(201));","if (pm.response.code === 201) pm.environment.set('conversationId', pm.response.json().data.id);"]}}]
+        },
+        {
+          "name": "Find conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "conversations", "{{conversationId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Conversation ID matches', () => pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('conversationId')));"
+              ]
+            }
+          }]
         },
         {
           "name": "Add inbound text message",
@@ -945,6 +1085,11 @@
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Collecting items', () => pm.expect(pm.response.json().data.context.state).to.eql('COLLECTING_ITEMS'));"]}}]
         },
         {
+          "name": "Engine - Repeat message idempotently",
+          "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"text\":\"NUEVA BOLETA DNI {{recipientDocumentNumber}} PEN\",\"externalMessageId\":\"engine-start-1\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/process","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","process"]},"description":"Reenvía el mismo identificador externo y verifica que el motor no procese dos veces el comando."},
+          "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Duplicate was ignored', () => pm.expect(pm.response.json().data.reply).to.eql('Mensaje ya procesado.'));","pm.test('Context was preserved', () => pm.expect(pm.response.json().data.context.state).to.eql('COLLECTING_ITEMS'));" ]}}]
+        },
+        {
           "name": "Engine - Add item",
           "request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"text\":\"AGREGAR 2 | Servicio mensual | 100.00\",\"externalMessageId\":\"engine-item-1\"}","options":{"raw":{"language":"json"}}},"url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/process","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","process"]}},
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Item added', () => pm.expect(pm.response.json().data.context.itemCount).to.be.above(0));"]}}]
@@ -963,6 +1108,29 @@
           "name": "Close conversation after engine flow",
           "request":{"method":"POST","header":[],"url":{"raw":"{{baseUrl}}/api/v1/conversations/{{conversationId}}/close","host":["{{baseUrl}}"],"path":["api","v1","conversations","{{conversationId}}","close"]}},
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Conversation is closed', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"]}}]
+        },
+        {
+          "name": "Cancel generated draft",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "cancel"]
+            },
+            "description": "Cancela correctamente el borrador DRAFT creado por el motor y complementa el caso negativo probado tras la numeración."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                "pm.test('Draft is CANCELLED', () => pm.expect(pm.response.json().data.status).to.eql('CANCELLED'));"
+              ]
+            }
+          }]
         }
       ]
     }

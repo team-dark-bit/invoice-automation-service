@@ -1,103 +1,147 @@
-# Invoice Assistant
+# Invoice Automation Service
 
-Servicio backend de un SaaS de facturación conversacional. El estado actual incluye la base hexagonal, seguridad JWT, aislamiento multiempresa, onboarding tributario, resolución de receptores, borradores con impuestos, series y correlativos, aprobación, comprobantes electrónicos inmutables y seguimiento del proveedor mediante un adaptador simulado. WhatsApp y las integraciones externas reales se incorporarán posteriormente.
+Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST o desde un motor conversacional independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, observabilidad y pruebas con PostgreSQL real.
 
-## Arquitectura
+La emisión utiliza actualmente `MockBillingProvider`. La integración HTTP con NUBEFACT, el webhook de WhatsApp, la consulta real de DNI/RUC y OCR/IA todavía son adaptadores pendientes; el dominio y sus puertos ya están preparados para incorporarlos sin trasladar lógica de negocio a los controladores.
 
-- `domain`: modelo y reglas puras, sin dependencias de frameworks.
-- `application`: puertos de entrada/salida y casos de uso.
-- `infrastructure`: adaptadores REST y PostgreSQL, además de configuración Spring.
+## Arquitectura y estructura
 
-Stack: Java 25, Spring Boot 4.1.1, Spring MVC, Maven, PostgreSQL, JPA, Flyway, Validation, Actuator, OpenAPI, JUnit 5 y Mockito.
+La aplicación sigue arquitectura hexagonal:
 
-## Ejecución local
+```text
+src/main/java/com/invoiceautomationservice
+├── domain          modelos, estados, cálculos e invariantes puras
+├── application     casos de uso, DTO y puertos de entrada/salida
+├── infrastructure  REST, seguridad, JPA, proveedores y configuración
+└── commons         respuestas y utilidades transversales
+```
 
-Requisitos: JDK 25 y Docker. El repositorio incluye Maven Wrapper.
+- Los controladores convierten HTTP en comandos y delegan; no calculan impuestos ni deciden transiciones.
+- Los servicios de aplicación coordinan permisos, repositorios, transacciones y puertos externos.
+- El dominio protege estados, snapshots e importes sin depender de Spring, HTTP o JPA.
+- Los adaptadores implementan PostgreSQL, JWT, resolución de receptores y facturación simulada.
+
+Stack: Java 25, Spring Boot 4.1.1, Spring MVC, Spring Security, Maven, PostgreSQL 17, JPA/Hibernate, Flyway, Bean Validation, Actuator, Micrometer/Prometheus, OpenAPI, JUnit 5, Mockito y Testcontainers.
+
+## Inicio rápido local
+
+Requisitos: JDK 25 y Docker. No es necesario instalar Maven porque se incluye Maven Wrapper.
 
 ```bash
 docker compose up -d postgres
 ./mvnw spring-boot:run
 ```
 
-La configuración acepta `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`, con valores locales predeterminados alineados con Compose.
+En Windows:
 
-En Windows use `mvnw.cmd` en lugar de `./mvnw`. Las pruebas unitarias y web no requieren Docker; PostgreSQL sí es necesario para ejecutar la aplicación completa.
-
-```bash
-./mvnw test
-./mvnw verify
+```powershell
+docker compose up -d postgres
+.\mvnw.cmd spring-boot:run
 ```
 
-Construcción y ejecución de la imagen de aplicación:
+La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER` y `RECIPIENT_LOOKUP_PROVIDER`.
+
+Credenciales sembradas exclusivamente para desarrollo:
+
+```text
+usuario: haroldqc
+clave:   password
+```
+
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Salud: `http://localhost:8080/actuator/health`
+
+Comandos de calidad y empaquetado:
 
 ```bash
+./mvnw test          # suite unitaria y web, sin Docker
+./mvnw verify        # incluye integración y concurrencia con Testcontainers
 ./mvnw clean package
 docker build -t invoice-automation-service .
 ```
 
-## API
+En Windows sustituya `./mvnw` por `.\mvnw.cmd`. `verify` requiere Docker activo y crea un PostgreSQL temporal; no usa ni modifica la base local.
 
-Crear un borrador completo:
+## Flujo funcional recomendado
 
-```bash
-curl -i -X POST http://localhost:8080/api/v1/invoice-drafts \
-  -H "Content-Type: application/json" \
-  -d '{"companyId":"company-id","documentType":"SALES_RECEIPT","recipientDocumentType":"DNI","recipientDocumentNumber":"12345678","currency":"PEN","items":[{"description":"Servicio de consultoría","unitCode":"NIU","quantity":2,"unitPrice":150.00,"discount":0,"taxAffectation":"TAXED"}]}'
+1. Iniciar sesión o ejecutar el onboarding público para crear propietario y empresa.
+2. Configurar el perfil tributario del emisor.
+3. Configurar series para boleta, factura y, si corresponde, notas.
+4. Resolver el receptor por DNI/RUC; no es obligatorio crearlo manualmente.
+5. Crear y editar el borrador mientras esté en `DRAFT`.
+6. Aprobarlo y emitirlo. La emisión reserva el correlativo y crea el comprobante inmutable.
+7. Consultar o reintentar el envío y, sobre un documento aceptado, emitir notas o anularlo.
+8. Consultar la auditoría o iniciar el mismo armado de borrador desde una conversación.
+
+Estados principales:
+
+```text
+InvoiceDraft:       DRAFT → APPROVED → ISSUED
+                       └──────────────→ CANCELLED
+
+ElectronicDocument: PENDING_SEND → SENDING → SENT → ACCEPTED
+                                  └────────→ ERROR   └→ REJECTED
+
+Conversation:       OPEN → CLOSED
 ```
 
-Crear una empresa:
+## Convenciones de la API
 
-```bash
-curl -i -X POST http://localhost:8080/api/v1/companies \
-  -H "Content-Type: application/json" \
-  -d '{"legalName":"Dark Bit SAC","tradeName":"Dark Bit","taxId":"20123456789","address":"Lima"}'
+Salvo login, onboarding y endpoints públicos de Actuator, todas las solicitudes requieren:
+
+```http
+Authorization: Bearer <JWT>
 ```
 
-Consultar empresas:
+Cuando el usuario pertenece a más de una empresa, los endpoints que no incluyen la empresa en la ruta requieren:
 
-```bash
-curl -i http://localhost:8080/api/v1/companies
-curl -i http://localhost:8080/api/v1/companies/{id}
+```http
+X-Company-Id: <companyId>
 ```
 
-Consultar un borrador:
+Si solo existe una empresa accesible, el backend puede resolverla automáticamente. Todas las respuestas funcionales usan el contenedor `ApiResponse`; los listados paginados agregan `content`, `page`, `size`, `totalElements`, `totalPages`, `first` y `last`. `page` comienza en cero y `size` admite de 1 a 100. Los errores más habituales son `400` por datos inválidos, `401` por token ausente o inválido, `403` por permisos, `404` por recurso inexistente o no visible para el tenant y `409` por transición de estado o concurrencia inválida.
 
-```bash
-curl -i http://localhost:8080/api/v1/invoice-drafts/{draftId}
-```
+Cada respuesta devuelve `X-Correlation-Id`, que permite relacionar la operación con sus logs.
 
-Aprobar y emitir un borrador mediante el proveedor mock:
+## Catálogo de endpoints
 
-```bash
-curl -i -X POST http://localhost:8080/api/v1/invoice-drafts/{draftId}/approve
-curl -i -X POST http://localhost:8080/api/v1/invoice-drafts/{draftId}/issue
-```
+| Área | Operaciones |
+| --- | --- |
+| Autenticación | `POST /api/auth/login`, `GET /api/auth/me` |
+| Onboarding | `POST /api/v1/onboarding` |
+| Empresas | `POST/GET /api/v1/companies`, `GET /api/v1/companies/{id}`, `GET /api/v1/companies/search` |
+| Perfil tributario | `POST/GET /api/v1/companies/{id}/tax-profile` |
+| Series | `POST/GET /api/v1/companies/{id}/document-series` |
+| Miembros | `POST/GET /api/v1/companies/{id}/members`, `POST .../members/existing`, `PATCH/DELETE .../members/{userId}` |
+| Clientes | `POST/GET /customers`, `GET /customers/{id}`, `GET /customers/search` |
+| Receptores | `POST /api/v1/recipients/resolve` |
+| Borradores | `POST/GET /api/v1/invoice-drafts`, `GET/PUT /api/v1/invoice-drafts/{id}`, `POST .../{id}/approve`, `.../cancel`, `.../issue` |
+| Comprobantes | `GET /api/v1/electronic-documents`, `GET .../{id}`, `POST .../{id}/refresh-status`, `.../retry` |
+| Notas y anulación | `POST .../{id}/credit-notes`, `.../debit-notes`, `.../cancel` |
+| Auditoría | `GET /api/v1/audit-events` |
+| Conversaciones | `POST/GET /api/v1/conversations`, `GET .../{id}`, `POST/GET .../{id}/messages`, `POST .../{id}/process`, `.../close` |
+| Operación | `GET /actuator/health`, `/health/liveness`, `/health/readiness`, `/info`, `/metrics`, `/prometheus` |
 
-Swagger UI: `http://localhost:8080/swagger-ui.html`. Salud: `http://localhost:8080/actuator/health`.
+Los filtros exactos, cuerpos, ejemplos y pruebas automáticas están versionados en la colección Postman y también pueden explorarse desde OpenAPI.
 
 ## Colección Postman
 
-El repositorio incluye una colección ejecutable con los endpoints actualmente disponibles:
+Importe estos dos archivos y seleccione `Invoice Automation Service - Local`:
 
-- Colección: `docs/postman/invoice-automation-service.postman_collection.json`
-- Environment local: `docs/postman/local.postman_environment.json`
+- `docs/postman/invoice-automation-service.postman_collection.json`
+- `docs/postman/local.postman_environment.json`
 
-Importe ambos archivos en Postman, seleccione el environment `Invoice Automation Service - Local` y ejecute la colección completa en el orden definido. El flujo realiza automáticamente lo siguiente:
+La colección hereda el bearer token, lo captura durante `Login and capture JWT` y propaga los IDs generados entre carpetas. El orden versionado recorre salud, autenticación, empresas, configuración tributaria, clientes/receptores, borradores, emisión idempotente, búsquedas, notas, auditoría, onboarding/miembros y conversaciones. También comprueba casos negativos como cancelar un borrador ya numerado y reintentar un documento en estado definitivo.
 
-1. Comprueba el estado de la aplicación.
-2. Inicia sesión con el usuario local creado por Flyway V7 y guarda el JWT.
-3. Consulta los datos del usuario autenticado.
-4. Crea una empresa y guarda su ID.
-5. Configura y consulta el perfil tributario del emisor.
-6. Consulta y lista empresas.
-7. Conserva los endpoints administrativos de clientes.
-8. Resuelve automáticamente un receptor por DNI y guarda su ID interno.
-9. Crea una boleta borrador con dos ítems, sin enviar `customerId`.
-10. Recupera el borrador persistido y valida sus ítems y totales.
-11. Aprueba el borrador y comprueba su cambio de estado.
-12. Emite el borrador con el proveedor mock y valida la referencia generada.
+Los RUC, DNI, usuarios, correos e identificadores externos de prueba se generan dinámicamente, por lo que la colección puede volver a ejecutarse sobre la misma base. Las operaciones que demuestran escenarios opcionales aceptan explícitamente los códigos esperados cuando la precondición no existe. No use las credenciales ni secretos locales en ambientes compartidos.
 
-Las credenciales locales iniciales son `haroldqc` / `password`. Son exclusivamente para desarrollo y pueden sobrescribirse en el environment de Postman. Los identificadores fiscales y documentos usados por la colección se generan dinámicamente para permitir varias ejecuciones.
+Para ejecución por CLI, si dispone de Newman:
+
+```bash
+newman run docs/postman/invoice-automation-service.postman_collection.json \
+  -e docs/postman/local.postman_environment.json
+```
 
 ## Aislamiento multiempresa
 
@@ -436,3 +480,25 @@ Introduce la abstracción necesaria para emitir una factura sin acoplar el caso 
 - Incluye pruebas del adaptador mock, del caso de uso, del dominio y del contrato HTTP.
 
 La futura integración con el proveedor de facturación implementará el mismo puerto `BillingProvider`, permitiendo sustituir el mock sin modificar el dominio ni el controlador. Los apartados posteriores de este README describen las capacidades tributarias y de seguridad añadidas después de la versión inicial de este release.
+
+## Estado de preparación para integraciones externas
+
+La preparación previa al proveedor real quedó cerrada con los siguientes puntos:
+
+1. Snapshot completo e inmutable del comprobante.
+2. Idempotencia de emisión por borrador.
+3. Separación entre persistencia y llamada externa.
+4. Reintentos controlados y errores recuperables.
+5. Edición y cancelación de borradores.
+6. Listados, búsqueda y paginación multiempresa.
+7. Contrato tributario mínimo requerido por NUBEFACT.
+8. Notas de crédito, débito y anulaciones.
+9. Auditoría inmutable.
+10. Onboarding real, roles y permisos por empresa.
+11. Modelos `Conversation` y `Message`.
+12. Motor conversacional independiente del canal.
+13. Pruebas de integración y concurrencia con PostgreSQL real.
+14. Configuración segura, correlación, salud y métricas.
+15. README, environment y colección Postman alineados con la implementación.
+
+Los siguientes trabajos corresponden a integraciones, no a carencias del núcleo actual: adaptador HTTP y credenciales por empresa para NUBEFACT; proveedor real de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; interpretación con IA/OCR; almacenamiento de archivos; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

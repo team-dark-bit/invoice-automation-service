@@ -17,15 +17,18 @@ class MockDocumentUnderstandingProviderTest {
       new MockDocumentUnderstandingProvider();
 
   @Test
-  void returnsSafeUnknownResultForText() {
+  void preservesDeterministicNaturalLanguageInterpretationForText() {
     var result = provider.interpretText(new TextInterpretationInput(
         "company-1", UUID.randomUUID(), "Dos leches a 3.50",
         InterpretationContextSnapshot.empty()));
 
     assertThat(result.source()).isEqualTo(InterpretationSource.TEXT);
-    assertThat(result.intent()).isEqualTo(InterpretationIntent.UNKNOWN);
-    assertThat(result.confidence()).isEqualByComparingTo(BigDecimal.ZERO);
-    assertThat(result.warnings()).singleElement().asString().contains("manual review");
+    assertThat(result.intent()).isEqualTo(InterpretationIntent.ADD_ITEM);
+    assertThat(result.confidence()).isGreaterThan(BigDecimal.ZERO);
+    assertThat(result.items()).singleElement().satisfies(item -> {
+      assertThat(item.quantity()).isEqualByComparingTo("2");
+      assertThat(item.unitPrice()).isEqualByComparingTo("3.50");
+    });
   }
 
   @Test

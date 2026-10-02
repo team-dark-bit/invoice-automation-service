@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.invoiceautomationservice.application.model.StoredImageObject;
+import com.invoiceautomationservice.application.model.ImageProcessingRequested;
 import com.invoiceautomationservice.application.model.UploadConversationImageCommand;
 import com.invoiceautomationservice.application.port.out.ConversationImageRepository;
 import com.invoiceautomationservice.application.port.out.ConversationRepository;
@@ -19,6 +20,7 @@ import com.invoiceautomationservice.domain.model.ConversationChannel;
 import com.invoiceautomationservice.domain.model.ConversationImage;
 import com.invoiceautomationservice.domain.model.ImageFormat;
 import com.invoiceautomationservice.domain.model.ImageRetentionPolicy;
+import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
 import com.invoiceautomationservice.domain.model.Message;
 import com.invoiceautomationservice.infrastructure.config.ImageStorageProperties;
 import java.awt.image.BufferedImage;
@@ -31,6 +33,7 @@ import java.util.UUID;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 class ConversationImageServiceTest {
   private static final Instant NOW = Instant.parse("2026-10-01T15:00:00Z");
@@ -39,6 +42,7 @@ class ConversationImageServiceTest {
   private MessageRepository messages;
   private ImageStoragePort storage;
   private CompanyAccessService access;
+  private ApplicationEventPublisher events;
   private ConversationImageService service;
   private Conversation conversation;
 
@@ -49,6 +53,7 @@ class ConversationImageServiceTest {
     messages = mock(MessageRepository.class);
     storage = mock(ImageStoragePort.class);
     access = mock(CompanyAccessService.class);
+    events = mock(ApplicationEventPublisher.class);
     ImageStorageProperties properties = new ImageStorageProperties();
     conversation = Conversation.open("company-1", null, null, ConversationChannel.REST,
         "contact", NOW.minusSeconds(60));
@@ -61,7 +66,7 @@ class ConversationImageServiceTest {
         "12/123e4567-e89b-12d3-a456-426614174000.png"));
     service = new ConversationImageService(conversations, images, messages, storage,
         new ImageInspector(properties), properties, access, mock(AuditTrailService.class),
-        Clock.fixed(NOW, ZoneOffset.UTC));
+        events, Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   @Test
@@ -111,11 +116,25 @@ class ConversationImageServiceTest {
   }
 
   @Test
+  void canQueueAnImageStillInReceivedStateAfterARecoveredEvent() {
+    ConversationImage image = image("a".repeat(64), null);
+    when(images.findByIdAndConversationId(image.id(), conversation.id()))
+        .thenReturn(Optional.of(image));
+
+    var response = service.retryProcessing(conversation.id(), image.id());
+
+    assertThat(response.processingStatus()).isEqualTo(ImageProcessingStatus.RECEIVED);
+    verify(events).publishEvent(new ImageProcessingRequested(image.id()));
+    verify(access).requirePermission("company-1", CompanyPermission.CONVERSATION_MANAGE);
+  }
+
+  @Test
   void removesExpiredTemporaryImages() {
     ConversationImage expired = new ConversationImage(UUID.randomUUID(), conversation.id(),
         UUID.randomUUID(), "12/123e4567-e89b-12d3-a456-426614174000.png", "ticket.png",
         ImageFormat.PNG, 100, 2, 3, "a".repeat(64), ImageRetentionPolicy.TEMPORARY,
-        NOW.minusSeconds(1), NOW.minusSeconds(3600), null);
+        NOW.minusSeconds(1), NOW.minusSeconds(3600), null,
+        ImageProcessingStatus.RECEIVED, 0, null, null, null, null);
     when(images.findExpired(NOW, 100)).thenReturn(java.util.List.of(expired));
 
     service.deleteExpired();
@@ -133,7 +152,8 @@ class ConversationImageServiceTest {
     UUID id = UUID.randomUUID();
     return new ConversationImage(id, conversation.id(), UUID.randomUUID(),
         "12/123e4567-e89b-12d3-a456-426614174000.png", "ticket.png", ImageFormat.PNG,
-        100, 2, 3, hash, ImageRetentionPolicy.TEMPORARY, NOW.plusSeconds(3600), NOW, deletedAt);
+        100, 2, 3, hash, ImageRetentionPolicy.TEMPORARY, NOW.plusSeconds(3600), NOW, deletedAt,
+        ImageProcessingStatus.RECEIVED, 0, null, null, null, null);
   }
 
   private byte[] png() throws Exception {

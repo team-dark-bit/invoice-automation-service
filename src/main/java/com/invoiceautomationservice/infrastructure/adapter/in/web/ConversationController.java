@@ -147,4 +147,11 @@ public class ConversationController {
     images.delete(id, imageId);
     return ResponseEntity.noContent().build();
   }
+
+  @PostMapping("/{id}/images/{imageId}/process")
+  public ResponseEntity<ApiResponse<ConversationImageResponse>> retryImageProcessing(
+      @PathVariable UUID id, @PathVariable UUID imageId) {
+    return ResponseEntity.accepted().body(ApiResponse.success(202,
+        "Image processing queued", images.retryProcessing(id, imageId)));
+  }
 }

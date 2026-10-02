@@ -18,11 +18,12 @@ import org.springframework.stereotype.Component;
 public class MockDocumentUnderstandingProvider implements DocumentUnderstandingProvider {
   private static final String WARNING =
       "Mock provider does not interpret content; manual review is required";
+  private final RuleBasedDocumentUnderstandingProvider textProvider =
+      new RuleBasedDocumentUnderstandingProvider();
 
   @Override
   public DocumentInterpretation interpretText(TextInterpretationInput input) {
-    Objects.requireNonNull(input, "input must not be null");
-    return DocumentInterpretation.unsupported(InterpretationSource.TEXT, WARNING);
+    return textProvider.interpretText(input);
   }
 
   @Override

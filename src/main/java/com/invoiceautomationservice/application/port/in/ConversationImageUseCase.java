@@ -9,5 +9,6 @@ public interface ConversationImageUseCase {
   ConversationImageResponse upload(UUID conversationId, UploadConversationImageCommand command);
   ConversationImageResponse findById(UUID conversationId, UUID imageId);
   ConversationImageContent loadContent(UUID conversationId, UUID imageId);
+  ConversationImageResponse retryProcessing(UUID conversationId, UUID imageId);
   void delete(UUID conversationId, UUID imageId);
 }

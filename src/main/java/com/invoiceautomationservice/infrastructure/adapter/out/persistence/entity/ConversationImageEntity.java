@@ -2,6 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence.enti
 
 import com.invoiceautomationservice.domain.model.ImageFormat;
 import com.invoiceautomationservice.domain.model.ImageRetentionPolicy;
+import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -34,4 +35,12 @@ public class ConversationImageEntity {
   @Column(name = "expires_at") private Instant expiresAt;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "deleted_at") private Instant deletedAt;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "processing_status", nullable = false, length = 20)
+  private ImageProcessingStatus processingStatus;
+  @Column(name = "processing_attempts", nullable = false) private int processingAttempts;
+  @Column(name = "processing_started_at") private Instant processingStartedAt;
+  @Column(name = "processed_at") private Instant processedAt;
+  @Column(name = "last_processing_error", length = 1000) private String lastProcessingError;
+  @Column(name = "interpretation_json", columnDefinition = "TEXT") private String interpretationJson;
 }

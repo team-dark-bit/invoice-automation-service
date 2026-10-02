@@ -10,5 +10,6 @@ public interface ConversationImageRepository {
   ConversationImage save(ConversationImage image);
   Optional<ConversationImage> findActiveByConversationIdAndSha256(UUID conversationId, String sha256);
   Optional<ConversationImage> findByIdAndConversationId(UUID imageId, UUID conversationId);
+  Optional<ConversationImage> findByIdForUpdate(UUID imageId);
   List<ConversationImage> findExpired(Instant now, int limit);
 }

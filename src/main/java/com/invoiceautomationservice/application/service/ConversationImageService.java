@@ -7,6 +7,7 @@ import static com.invoiceautomationservice.infrastructure.config.exception.Runti
 
 import com.invoiceautomationservice.application.dto.response.ConversationImageResponse;
 import com.invoiceautomationservice.application.model.ConversationImageContent;
+import com.invoiceautomationservice.application.model.ImageProcessingRequested;
 import com.invoiceautomationservice.application.model.StoredImageObject;
 import com.invoiceautomationservice.application.model.UploadConversationImageCommand;
 import com.invoiceautomationservice.application.port.in.ConversationImageUseCase;
@@ -17,6 +18,7 @@ import com.invoiceautomationservice.application.port.out.MessageRepository;
 import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.domain.model.ConversationImage;
+import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
 import com.invoiceautomationservice.domain.model.ImageRetentionPolicy;
 import com.invoiceautomationservice.domain.model.Message;
 import com.invoiceautomationservice.domain.model.MessageDirection;
@@ -29,6 +31,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +49,7 @@ public class ConversationImageService implements ConversationImageUseCase {
   private final ImageStorageProperties properties;
   private final CompanyAccessService accessService;
   private final AuditTrailService auditTrailService;
+  private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
   @Override
@@ -85,11 +89,14 @@ public class ConversationImageService implements ConversationImageUseCase {
       ConversationImage image = imageRepository.save(new ConversationImage(imageId,
           conversationId, message.id(), stored.key(), message.content(), inspected.format(),
           command.content().length, inspected.width(), inspected.height(), inspected.sha256(),
-          policy, expiresAt, now, null));
+          policy, expiresAt, now, null,
+          ImageProcessingStatus.RECEIVED,
+          0, null, null, null, null));
       conversationRepository.save(conversation.touch(now));
       auditTrailService.record(conversation.companyId(), AuditAction.IMAGE_STORED,
           "CONVERSATION_IMAGE", image.id(), "SUCCESS",
           inspected.format() + " " + inspected.width() + "x" + inspected.height());
+      eventPublisher.publishEvent(new ImageProcessingRequested(image.id()));
       return toResponse(image, false);
     } catch (RuntimeException exception) {
       try {
@@ -118,6 +125,19 @@ public class ConversationImageService implements ConversationImageUseCase {
     ensureActive(image);
     return new ConversationImageContent(image.originalFilename(), image.format(),
         storage.load(image.storageKey()));
+  }
+
+  @Override
+  @Transactional
+  public ConversationImageResponse retryProcessing(UUID conversationId, UUID imageId) {
+    var conversation = conversationRepository.findByIdForUpdate(conversationId);
+    accessService.requirePermission(conversation.companyId(), CompanyPermission.CONVERSATION_MANAGE);
+    ConversationImage image = findImage(conversationId, imageId);
+    ensureActive(image);
+    ConversationImage queued = image.processingStatus() == ImageProcessingStatus.RECEIVED
+        ? image : imageRepository.save(image.retry());
+    eventPublisher.publishEvent(new ImageProcessingRequested(image.id()));
+    return toResponse(queued, false);
   }
 
   @Override
@@ -180,7 +200,9 @@ public class ConversationImageService implements ConversationImageUseCase {
     return new ConversationImageResponse(image.id(), image.conversationId(), image.messageId(),
         image.originalFilename(), image.format().mediaType(), image.sizeBytes(), image.width(),
         image.height(), image.sha256(), image.retentionPolicy(), image.expiresAt(),
-        image.createdAt(), image.deletedAt(), duplicate);
+        image.createdAt(), image.deletedAt(), duplicate, image.processingStatus(),
+        image.processingAttempts(), image.processingStartedAt(), image.processedAt(),
+        image.lastProcessingError(), image.interpretation());
   }
 
   private String imageContentUrl(UUID conversationId, UUID imageId) {

@@ -39,7 +39,7 @@ docker compose up -d postgres
 .\mvnw.cmd spring-boot:run
 ```
 
-La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER` y las variables `IMAGE_*` descritas en la sección de imágenes.
+La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER`, `AI_PROVIDER`, `AI_MODEL` y las variables `IMAGE_*` descritas en la sección de imágenes.
 
 Credenciales sembradas exclusivamente para desarrollo:
 
@@ -121,7 +121,7 @@ Cada respuesta devuelve `X-Correlation-Id`, que permite relacionar la operación
 | Notas y anulación | `POST .../{id}/credit-notes`, `.../debit-notes`, `.../cancel` |
 | Auditoría | `GET /api/v1/audit-events` |
 | Conversaciones | `POST/GET /api/v1/conversations`, `GET .../{id}`, `POST/GET .../{id}/messages`, `POST .../{id}/process`, `.../close` |
-| Imágenes | `POST /api/v1/conversations/{id}/images`, `GET/DELETE .../images/{imageId}`, `GET .../images/{imageId}/content` |
+| Imágenes | `POST /api/v1/conversations/{id}/images`, `POST .../images/{imageId}/process`, `GET/DELETE .../images/{imageId}`, `GET .../images/{imageId}/content` |
 | Operación | `GET /actuator/health`, `/health/liveness`, `/health/readiness`, `/info`, `/metrics`, `/prometheus` |
 
 Los filtros exactos, cuerpos, ejemplos y pruebas automáticas están versionados en la colección Postman y también pueden explorarse desde OpenAPI.
@@ -348,7 +348,24 @@ El puerto de salida `DocumentUnderstandingProvider` desacopla el motor conversac
 
 El resultado neutral contiene intención, tipo de comprobante, receptor, moneda, ítems candidatos, total reportado, confianza entre 0 y 1, campos faltantes y advertencias. Los ítems admiten datos parciales para solicitar aclaraciones posteriormente; las colecciones y el contenido binario se copian defensivamente. Una interpretación es solo una propuesta: no crea, aprueba ni emite comprobantes y los totales siempre deberán recalcularse con las reglas del dominio.
 
-`AI_PROVIDER` selecciona el adaptador y usa `rules` por defecto. Este adaptador interpreta texto con reglas deterministas y no realiza llamadas externas. Puede establecerse `AI_PROVIDER=mock` para deshabilitar la interpretación y responder `UNKNOWN` con revisión manual. `AI_MODEL` queda reservado para el futuro adaptador multimodal real. La interpretación de imágenes todavía responde como no soportada.
+`AI_PROVIDER` selecciona el adaptador y usa `mock` por defecto. Este adaptador conserva las reglas deterministas para texto, no realiza llamadas externas y, para imágenes, produce una interpretación neutral `UNKNOWN` con revisión manual. `AI_MODEL` identifica el modelo que usará el futuro adaptador remoto y su valor inicial es `gpt-5.4-nano`.
+
+### Procesamiento multimodal asíncrono
+
+Una imagen nueva queda en `RECEIVED`. Después de confirmar la transacción de carga se publica un evento interno que un executor acotado procesa fuera del hilo HTTP. El trabajador bloquea el registro antes de reclamarlo, carga el binario mediante `ImageStoragePort`, construye `ImageInterpretationInput` con el contexto actual de la conversación y llama al mismo `DocumentUnderstandingProvider` utilizado por texto.
+
+El ciclo persistido es `RECEIVED -> PROCESSING -> EXTRACTED`; cualquier error recuperable durante la lectura o interpretación termina en `FAILED`. Se guardan número de intentos, fechas de inicio y fin, error seguro e interpretación estructurada. `POST /api/v1/conversations/{id}/images/{imageId}/process` encola una imagen `RECEIVED` o vuelve a encolar una imagen `FAILED`, y responde `202`; esto también permite recuperar un evento perdido tras un reinicio. `GET /api/v1/conversations/{id}/images/{imageId}` permite consultar el estado y el resultado.
+
+Con `AI_PROVIDER=mock`, la transición completa de forma determinista sin OCR externo: queda `EXTRACTED`, pero con intención `UNKNOWN`, confianza cero y advertencia de revisión manual. Esto permite probar almacenamiento, asincronía, auditoría y reintentos sin inventar datos tributarios. La interpretación almacenada es solo una propuesta: este flujo no modifica el contexto, no crea un borrador y nunca aprueba ni emite un comprobante automáticamente.
+
+Configuración inicial:
+
+```text
+AI_PROVIDER=mock
+AI_MODEL=gpt-5.4-nano
+```
+
+La integración posterior con OpenAI deberá implementar `DocumentUnderstandingProvider`, enviar la imagen mediante la Responses API y seleccionarse con `AI_PROVIDER=openai`, sin cambiar el controlador ni el dominio. La clave deberá llegar por secreto de entorno y nunca persistirse. Antes de activar producción debe verificarse la disponibilidad vigente del modelo configurado.
 
 ### Pruebas de integración y concurrencia
 
@@ -540,5 +557,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 16. Contrato unificado y neutral para interpretar texto e imágenes.
 17. Interpretación determinista de texto natural, acumulación y validación de totales.
 18. Recepción, validación, deduplicación, retención y almacenamiento de imágenes.
+19. Procesamiento multimodal asíncrono, estados persistidos, reintento y proveedor mock.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador multimodal real; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; aplicación revisable de la extracción al contexto; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

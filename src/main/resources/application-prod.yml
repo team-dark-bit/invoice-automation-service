@@ -17,8 +17,8 @@ recipient:
   lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}
 
 ai:
-  provider: ${AI_PROVIDER:rules}
-  model: ${AI_MODEL:rules}
+  provider: ${AI_PROVIDER:mock}
+  model: ${AI_MODEL:gpt-5.4-nano}
 
 image-storage:
   provider: ${IMAGE_STORAGE_PROVIDER:local}

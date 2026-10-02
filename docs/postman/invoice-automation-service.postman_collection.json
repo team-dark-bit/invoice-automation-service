@@ -1202,7 +1202,7 @@
     },
     {
       "name": "Conversation Images",
-      "description": "Configure imagePath en el environment con un JPEG, PNG o WebP local válido antes de ejecutar esta carpeta.",
+      "description": "Configure imagePath con un JPEG, PNG o WebP local válido. La carga encola procesamiento asíncrono; con AI_PROVIDER=mock termina EXTRACTED con una interpretación UNKNOWN para revisión manual y nunca emite comprobantes.",
       "item": [
         {
           "name": "Create image conversation",
@@ -1227,7 +1227,7 @@
             ]},
             "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images"]}
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "pm.test('Image metadata is valid', () => { const data = pm.response.json().data; pm.expect(data.sha256).to.match(/^[a-f0-9]{64}$/); pm.expect(data.duplicate).to.eql(false); pm.environment.set('conversationImageId', data.id); });"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "pm.test('Image is stored and queued', () => { const data = pm.response.json().data; pm.expect(data.sha256).to.match(/^[a-f0-9]{64}$/); pm.expect(data.duplicate).to.eql(false); pm.expect(data.processingStatus).to.eql('RECEIVED'); pm.expect(data.processingAttempts).to.eql(0); pm.environment.set('conversationImageId', data.id); });"]}}]
         },
         {
           "name": "Prevent duplicate image",
@@ -1247,7 +1247,17 @@
         {
           "name": "Get image metadata",
           "request": {"method": "GET", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}"]}},
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Image is active', () => pm.expect(pm.response.json().data.deletedAt).to.eql(null));"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Image has a valid processing state', () => { const data = pm.response.json().data; pm.expect(data.deletedAt).to.eql(null); pm.expect(['RECEIVED','PROCESSING','EXTRACTED','FAILED']).to.include(data.processingStatus); if (data.processingStatus === 'EXTRACTED') { pm.expect(data.interpretation.source).to.eql('IMAGE'); pm.expect(data.interpretation.intent).to.eql('UNKNOWN'); } pm.environment.set('imageProcessingStatus', data.processingStatus); });"]}}]
+        },
+        {
+          "name": "Queue or retry image processing",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/images/{{conversationImageId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "images", "{{conversationImageId}}", "process"]},
+            "description": "Encola estados RECEIVED o reintenta FAILED. Responde 202; con el mock normalmente devuelve 409 porque la imagen ya quedó EXTRACTED."
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('Retry is queued or rejected for a non-failed image', () => pm.expect([202,409]).to.include(pm.response.code));", "if (pm.response.code === 202) pm.test('State returned to RECEIVED', () => pm.expect(pm.response.json().data.processingStatus).to.eql('RECEIVED'));"]}}]
         },
         {
           "name": "Download image content",

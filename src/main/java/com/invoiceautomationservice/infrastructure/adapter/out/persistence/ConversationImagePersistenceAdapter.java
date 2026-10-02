@@ -2,6 +2,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence;
 
 import com.invoiceautomationservice.application.port.out.ConversationImageRepository;
 import com.invoiceautomationservice.domain.model.ConversationImage;
+import com.invoiceautomationservice.domain.model.DocumentInterpretation;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.ConversationImageEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaConversationImageRepository;
 import java.time.Instant;
@@ -11,11 +12,13 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 @RequiredArgsConstructor
 public class ConversationImagePersistenceAdapter implements ConversationImageRepository {
   private final JpaConversationImageRepository repository;
+  private final JsonMapper jsonMapper;
 
   @Override
   public ConversationImage save(ConversationImage image) {
@@ -32,6 +35,11 @@ public class ConversationImagePersistenceAdapter implements ConversationImageRep
   @Override
   public Optional<ConversationImage> findByIdAndConversationId(UUID imageId, UUID conversationId) {
     return repository.findByIdAndConversationId(imageId, conversationId).map(this::toDomain);
+  }
+
+  @Override
+  public Optional<ConversationImage> findByIdForUpdate(UUID imageId) {
+    return repository.findByIdForUpdate(imageId).map(this::toDomain);
   }
 
   @Override
@@ -56,6 +64,12 @@ public class ConversationImagePersistenceAdapter implements ConversationImageRep
     entity.setExpiresAt(value.expiresAt());
     entity.setCreatedAt(value.createdAt());
     entity.setDeletedAt(value.deletedAt());
+    entity.setProcessingStatus(value.processingStatus());
+    entity.setProcessingAttempts(value.processingAttempts());
+    entity.setProcessingStartedAt(value.processingStartedAt());
+    entity.setProcessedAt(value.processedAt());
+    entity.setLastProcessingError(value.lastProcessingError());
+    entity.setInterpretationJson(writeInterpretation(value.interpretation()));
     return entity;
   }
 
@@ -63,6 +77,27 @@ public class ConversationImagePersistenceAdapter implements ConversationImageRep
     return new ConversationImage(value.getId(), value.getConversationId(), value.getMessageId(),
         value.getStorageKey(), value.getOriginalFilename(), value.getFormat(), value.getSizeBytes(),
         value.getWidth(), value.getHeight(), value.getSha256(), value.getRetentionPolicy(),
-        value.getExpiresAt(), value.getCreatedAt(), value.getDeletedAt());
+        value.getExpiresAt(), value.getCreatedAt(), value.getDeletedAt(),
+        value.getProcessingStatus(), value.getProcessingAttempts(), value.getProcessingStartedAt(),
+        value.getProcessedAt(), value.getLastProcessingError(),
+        readInterpretation(value.getInterpretationJson()));
+  }
+
+  private String writeInterpretation(DocumentInterpretation interpretation) {
+    if (interpretation == null) return null;
+    try {
+      return jsonMapper.writeValueAsString(interpretation);
+    } catch (Exception exception) {
+      throw new IllegalStateException("could not serialize image interpretation", exception);
+    }
+  }
+
+  private DocumentInterpretation readInterpretation(String value) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return jsonMapper.readValue(value, DocumentInterpretation.class);
+    } catch (Exception exception) {
+      throw new IllegalStateException("could not deserialize image interpretation", exception);
+    }
   }
 }

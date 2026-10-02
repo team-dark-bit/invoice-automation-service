@@ -24,8 +24,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "rules",
-    matchIfMissing = true)
+@ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "rules")
 public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstandingProvider {
   private static final Pattern DNI = Pattern.compile("\\bdni\\s*(?:numero|nro\\.?|#)?\\s*(\\d{8})\\b");
   private static final Pattern RUC = Pattern.compile("\\bruc\\s*(?:numero|nro\\.?|#)?\\s*(\\d{11})\\b");

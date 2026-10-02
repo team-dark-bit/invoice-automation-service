@@ -28,4 +28,14 @@ public record ConversationDraftItem(
     return new ConversationDraftItem(UUID.randomUUID(), description, UnitCode.NIU, quantity,
         unitPrice, BigDecimal.ZERO, TaxAffectation.TAXED);
   }
+
+  public ConversationDraftItem changeQuantity(BigDecimal newQuantity) {
+    return new ConversationDraftItem(id, description, unitCode, newQuantity, unitPrice,
+        discount, taxAffectation);
+  }
+
+  public ConversationDraftItem changeUnitPrice(BigDecimal newUnitPrice) {
+    return new ConversationDraftItem(id, description, unitCode, quantity, newUnitPrice,
+        discount, taxAffectation);
+  }
 }

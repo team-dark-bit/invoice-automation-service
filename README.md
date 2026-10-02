@@ -327,6 +327,24 @@ El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantida
 
 Estas reglas cubren formatos controlados; no pretenden comprender cualquier redacción. Ante un mensaje no reconocido, la respuesta incluye los comandos exactos disponibles, que siguen teniendo prioridad sobre la interpretación natural.
 
+### Correcciones conversacionales
+
+El mismo endpoint `POST /api/v1/conversations/{id}/process` reconoce correcciones explícitas, entre ellas:
+
+- `Cambia la cantidad de Leche Gloria a 3`
+- `Cambia el precio de Leche Gloria a 3.80`
+- `El precio es 3.80`, cuando existe un único producto pendiente o confirmado
+- `Elimina el pan`
+- `El DNI correcto es 87654321`
+- `El RUC correcto es 20123456789`
+- `Es factura, no boleta`
+
+Los nombres se comparan sin distinguir mayúsculas ni tildes y permiten referencias parciales como `pan` para `Panes`. Una coincidencia inexistente o múltiple no modifica datos: el motor solicita un nombre más preciso. Una corrección de cantidad o precio vuelve a calcular el total; eliminar el último producto deja el contexto en `COLLECTING_DATA`. Cambiar de boleta a factura elimina un receptor DNI previamente confirmado y solicita el RUC obligatorio.
+
+Cuando la última interpretación aún contiene un producto parcial, las correcciones completan sus campos detectados sin crear un segundo ítem. Al quedar completo y consistente, pasa a los valores confirmados. Si persiste una ambigüedad o un error de cálculo, permanece en `NEEDS_REVIEW`.
+
+Si el contexto está en `DRAFT_CREATED`, el motor consulta el borrador vinculado. Solo si continúa en estado tributario `DRAFT` construye un `UpdateInvoiceDraftRequest` con todos los datos e ítems, invoca `InvoiceDraftUseCase.update` y sincroniza el contexto con la respuesta. Se conservan unidad, descuento y afectación tributaria de cada ítem. Un borrador aprobado, emitido o cancelado no puede modificarse conversacionalmente.
+
 ### Recepción y almacenamiento de imágenes
 
 `POST /api/v1/conversations/{id}/images` recibe `multipart/form-data`. La parte obligatoria `file` admite JPEG, PNG y WebP; opcionalmente acepta `externalMessageId`, `retentionPolicy=TEMPORARY|PERMANENT` y `retentionDays`. Una carga nueva responde `201`; si el mismo contenido ya existe activo en la conversación, devuelve el recurso existente con `200` y `duplicate=true`, sin crear otro mensaje ni otro archivo.
@@ -566,5 +584,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 18. Recepción, validación, deduplicación, retención y almacenamiento de imágenes.
 19. Procesamiento multimodal asíncrono, estados persistidos, reintento y proveedor mock.
 20. Datos detectados y confirmados, confianza, ambigüedades, errores de cálculo y revisión.
+21. Correcciones conversacionales del contexto pendiente y de borradores editables.
 
 Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; correcciones detalladas de valores detectados; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

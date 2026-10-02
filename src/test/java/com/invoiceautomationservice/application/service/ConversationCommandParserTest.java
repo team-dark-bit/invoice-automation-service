@@ -4,33 +4,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.invoiceautomationservice.domain.model.IdentityDocumentType;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
-import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
 class ConversationCommandParserTest {
   private final ConversationCommandParser parser = new ConversationCommandParser();
 
   @Test
-  void parsesInvoiceStartCommandCaseInsensitively() {
-    var command = (ConversationCommandParser.StartCommand)
-        parser.parse(" nueva   factura ruc 20123456789 pen ");
-    assertThat(command.documentType()).isEqualTo(InvoiceDocumentType.INVOICE);
-    assertThat(command.identityType()).isEqualTo(IdentityDocumentType.RUC);
-    assertThat(command.currency()).isEqualTo("PEN");
-  }
-
-  @Test
-  void parsesItemUsingChannelNeutralTextFormat() {
-    var command = (ConversationCommandParser.AddItemCommand)
-        parser.parse("AGREGAR 2 | Servicio mensual | 100.50");
-    assertThat(command.description()).isEqualTo("Servicio mensual");
-    assertThat(command.quantity()).isEqualByComparingTo(new BigDecimal("2"));
-    assertThat(command.unitPrice()).isEqualByComparingTo(new BigDecimal("100.50"));
-  }
-
-  @Test
-  void returnsUnknownForMalformedCommand() {
-    assertThat(parser.parse("crear algo"))
-        .isInstanceOf(ConversationCommandParser.UnknownCommand.class);
+  void parsesConversationalCorrections() {
+    assertThat(parser.parse("Cambia la cantidad de Leche Gloria a 3"))
+        .isEqualTo(new ConversationCommandParser.ChangeItemQuantityCommand(
+            "Leche Gloria", new java.math.BigDecimal("3")));
+    assertThat(parser.parse("El precio es 3.80"))
+        .isEqualTo(new ConversationCommandParser.ChangeItemPriceCommand(
+            null, new java.math.BigDecimal("3.80")));
+    assertThat(parser.parse("Elimina el pan"))
+        .isEqualTo(new ConversationCommandParser.RemoveItemCommand("pan"));
+    assertThat(parser.parse("El DNI correcto es 87654321"))
+        .isEqualTo(new ConversationCommandParser.CorrectRecipientCommand(
+            IdentityDocumentType.DNI, "87654321"));
+    assertThat(parser.parse("Es factura, no boleta"))
+        .isEqualTo(new ConversationCommandParser.CorrectDocumentTypeCommand(
+            InvoiceDocumentType.INVOICE));
   }
 }

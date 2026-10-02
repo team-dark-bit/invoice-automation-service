@@ -2,15 +2,18 @@ package com.invoiceautomationservice.application.service;
 
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.request.CreateInvoiceItemRequest;
+import com.invoiceautomationservice.application.dto.request.UpdateInvoiceDraftRequest;
 import com.invoiceautomationservice.application.dto.response.ConversationContextResponse;
 import com.invoiceautomationservice.application.dto.response.ConversationEngineResponse;
 import com.invoiceautomationservice.application.dto.response.ConversationReviewResponse;
+import com.invoiceautomationservice.application.dto.response.InvoiceDraftResponse;
 import com.invoiceautomationservice.application.port.in.ConversationEngineUseCase;
 import com.invoiceautomationservice.application.port.in.InvoiceDraftUseCase;
 import com.invoiceautomationservice.application.port.out.ConversationContextRepository;
 import com.invoiceautomationservice.application.port.out.ConversationRepository;
 import com.invoiceautomationservice.application.port.out.DocumentUnderstandingProvider;
 import com.invoiceautomationservice.application.port.out.MessageRepository;
+import com.invoiceautomationservice.domain.exception.InvalidInvoiceDraftStateException;
 import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.domain.model.ConversationContext;
@@ -22,6 +25,7 @@ import com.invoiceautomationservice.domain.model.InterpretationContextSnapshot;
 import com.invoiceautomationservice.domain.model.InterpretationIntent;
 import com.invoiceautomationservice.domain.model.InterpretedInvoiceItem;
 import com.invoiceautomationservice.domain.model.InvoiceDocumentType;
+import com.invoiceautomationservice.domain.model.InvoiceDraftStatus;
 import com.invoiceautomationservice.domain.model.Message;
 import com.invoiceautomationservice.domain.model.MessageDirection;
 import com.invoiceautomationservice.domain.model.MessageStatus;
@@ -31,6 +35,8 @@ import com.invoiceautomationservice.infrastructure.config.AiProperties;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.text.Normalizer;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,7 +50,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConversationEngineService implements ConversationEngineUseCase {
   private static final String HELP = "Comandos: NUEVA BOLETA DNI 12345678 PEN; "
       + "NUEVA FACTURA RUC 20123456789 PEN; AGREGAR cantidad | descripción | precio; "
-      + "RESUMEN; CONFIRMAR; GENERAR; CANCELAR.";
+      + "RESUMEN; CONFIRMAR; GENERAR; CANCELAR. Correcciones: CAMBIA LA CANTIDAD DE "
+      + "producto A valor; CAMBIA EL PRECIO DE producto A valor; ELIMINA producto; "
+      + "EL DNI/RUC CORRECTO ES número; ES FACTURA/BOLETA.";
 
   private final ConversationRepository conversationRepository;
   private final ConversationContextRepository contextRepository;
@@ -120,6 +128,9 @@ public class ConversationEngineService implements ConversationEngineUseCase {
       } catch (IllegalArgumentException | IllegalStateException exception) {
         return result(context, exception.getMessage(), "ADD_ITEM_REJECTED");
       }
+    }
+    if (isCorrection(command)) {
+      return applyCorrection(context, command, now);
     }
     if (command instanceof ConversationCommandParser.SummaryCommand) {
       if (context.state() == ConversationFlowState.EMPTY) {
@@ -219,6 +230,315 @@ public class ConversationEngineService implements ConversationEngineUseCase {
           "NATURAL_NEEDS_REVIEW");
     }
     return applyConfirmedInterpretation(context, interpretation, now);
+  }
+
+  private boolean isCorrection(ConversationCommandParser.Command command) {
+    return command instanceof ConversationCommandParser.ChangeItemQuantityCommand
+        || command instanceof ConversationCommandParser.ChangeItemPriceCommand
+        || command instanceof ConversationCommandParser.RemoveItemCommand
+        || command instanceof ConversationCommandParser.CorrectRecipientCommand
+        || command instanceof ConversationCommandParser.CorrectDocumentTypeCommand;
+  }
+
+  private ProcessingResult applyCorrection(
+      ConversationContext context, ConversationCommandParser.Command command, Instant now) {
+    if (context.state() == ConversationFlowState.PROCESSING_MEDIA) {
+      return result(context, "Espera a que termine el procesamiento de la imagen.",
+          "CORRECTION_MEDIA_PROCESSING");
+    }
+    if (context.state() == ConversationFlowState.DRAFT_CREATED) {
+      return applyDraftCorrection(context, command, now);
+    }
+    try {
+      if (command instanceof ConversationCommandParser.ChangeItemQuantityCommand correction) {
+        if (correction.quantity().signum() <= 0) {
+          throw new CorrectionException("La cantidad debe ser mayor que cero.");
+        }
+        return correctContextItem(context, correction.itemReference(), correction.quantity(),
+            null, false, now);
+      }
+      if (command instanceof ConversationCommandParser.ChangeItemPriceCommand correction) {
+        if (correction.unitPrice().signum() < 0) {
+          throw new CorrectionException("El precio no puede ser negativo.");
+        }
+        return correctContextItem(context, correction.itemReference(), null,
+            correction.unitPrice(), false, now);
+      }
+      if (command instanceof ConversationCommandParser.RemoveItemCommand correction) {
+        return correctContextItem(context, correction.itemReference(), null, null, true, now);
+      }
+      if (command instanceof ConversationCommandParser.CorrectRecipientCommand correction) {
+        return correctContextRecipient(context, correction, now);
+      }
+      if (command instanceof ConversationCommandParser.CorrectDocumentTypeCommand correction) {
+        return correctContextDocumentType(context, correction.documentType(), now);
+      }
+      throw new CorrectionException("No se reconoció la corrección.");
+    } catch (CorrectionException | IllegalArgumentException | IllegalStateException exception) {
+      return result(context, exception.getMessage(), "CORRECTION_REJECTED");
+    }
+  }
+
+  private ProcessingResult correctContextItem(
+      ConversationContext context, String reference, BigDecimal quantity, BigDecimal unitPrice,
+      boolean remove, Instant now) {
+    ItemTarget target = resolveContextItem(context, reference);
+    if (target.pending()) {
+      DocumentInterpretation interpretation = context.lastInterpretation();
+      if (remove) {
+        if (interpretation.items().size() == 1) {
+          ConversationContext updated = context.discardPendingInterpretation(now);
+          return result(updated, "Producto detectado eliminado. " + readyInstruction(updated),
+              "CORRECT_PENDING_ITEM_REMOVED");
+        }
+        return finalizeCorrectedInterpretation(context,
+            interpretation.removeItem(target.index()), now, "Producto detectado eliminado.");
+      }
+      DocumentInterpretation corrected = quantity != null
+          ? interpretation.correctItemQuantity(target.index(), quantity)
+          : interpretation.correctItemUnitPrice(target.index(), unitPrice);
+      return finalizeCorrectedInterpretation(context, corrected, now,
+          quantity != null ? "Cantidad corregida." : "Precio corregido.");
+    }
+
+    var correctedItems = new ArrayList<>(context.items());
+    if (remove) {
+      correctedItems.remove(target.index());
+    } else {
+      ConversationDraftItem current = correctedItems.get(target.index());
+      correctedItems.set(target.index(), quantity != null
+          ? current.changeQuantity(quantity) : current.changeUnitPrice(unitPrice));
+    }
+    ConversationContext updated = context.replaceItems(correctedItems, now);
+    return result(updated, remove
+        ? "Producto eliminado. " + readyInstruction(updated)
+        : (quantity != null ? "Cantidad corregida. " : "Precio corregido. ")
+            + totalReply(updated), "CORRECT_CONTEXT_ITEM");
+  }
+
+  private ProcessingResult correctContextRecipient(ConversationContext context,
+      ConversationCommandParser.CorrectRecipientCommand correction, Instant now) {
+    validateDocumentNumber(correction.identityType(), correction.documentNumber());
+    if (context.documentType() == InvoiceDocumentType.INVOICE
+        && correction.identityType() != IdentityDocumentType.RUC) {
+      throw new CorrectionException("Una factura requiere receptor con RUC.");
+    }
+    DocumentInterpretation pending = pendingInterpretation(context);
+    if (pending != null && pending.intent() == InterpretationIntent.START_DOCUMENT) {
+      return finalizeCorrectedInterpretation(context,
+          pending.correctRecipient(correction.identityType(), correction.documentNumber()), now,
+          "Documento del receptor corregido.");
+    }
+    ConversationContext updated = context.correctRecipient(
+        correction.identityType(), correction.documentNumber(), now);
+    return result(updated, "Documento del receptor corregido. " + readyInstruction(updated),
+        "CORRECT_RECIPIENT");
+  }
+
+  private ProcessingResult correctContextDocumentType(
+      ConversationContext context, InvoiceDocumentType type, Instant now) {
+    DocumentInterpretation pending = pendingInterpretation(context);
+    if (pending != null && pending.intent() == InterpretationIntent.START_DOCUMENT) {
+      return finalizeCorrectedInterpretation(context, pending.correctDocumentType(type), now,
+          "Tipo de comprobante corregido.");
+    }
+    ConversationContext updated = context.correctDocumentType(type, now);
+    String reply = type == InvoiceDocumentType.INVOICE
+        && updated.recipientDocumentType() == null
+        ? "Tipo corregido a factura. Indica el RUC correcto del receptor."
+        : "Tipo de comprobante corregido. " + readyInstruction(updated);
+    return result(updated, reply, "CORRECT_DOCUMENT_TYPE");
+  }
+
+  private ProcessingResult finalizeCorrectedInterpretation(
+      ConversationContext context, DocumentInterpretation corrected, Instant now, String prefix) {
+    if (corrected.hasMissingFields()) {
+      ConversationContext updated = context.stageInterpretation(
+          corrected, ConversationFlowState.COLLECTING_DATA, now);
+      return result(updated, prefix + " Falta indicar: "
+          + describeFields(corrected.missingFields()) + ".", "CORRECTION_INCOMPLETE");
+    }
+    if (!corrected.ambiguousFields().isEmpty()) {
+      ConversationContext updated = context.stageInterpretation(
+          corrected, ConversationFlowState.NEEDS_REVIEW, now);
+      return result(updated, prefix + " Aún existen valores ambiguos en: "
+          + describeFields(corrected.ambiguousFields()) + ".", "CORRECTION_AMBIGUOUS");
+    }
+    if (corrected.documentType() == InvoiceDocumentType.INVOICE
+        && corrected.recipientDocumentType() != IdentityDocumentType.RUC) {
+      DocumentInterpretation awaitingRuc = corrected.requireRucRecipient();
+      ConversationContext updated = context.stageInterpretation(
+          awaitingRuc, ConversationFlowState.COLLECTING_DATA, now);
+      return result(updated, prefix + " Una factura requiere indicar un RUC.",
+          "CORRECTION_REQUIRES_RUC");
+    }
+    if (!corrected.calculationErrors().isEmpty()) {
+      ConversationContext updated = context.stageInterpretation(
+          corrected, ConversationFlowState.NEEDS_REVIEW, now);
+      return result(updated, prefix + " Persiste una inconsistencia: "
+          + String.join("; ", corrected.calculationErrors())
+          + ". Corrige nuevamente o responde CONFIRMAR.", "CORRECTION_CALCULATION_REVIEW");
+    }
+    ProcessingResult applied = applyConfirmedInterpretation(context, corrected, now);
+    return result(applied.context(), prefix + " " + applied.reply(), "CORRECTION_APPLIED");
+  }
+
+  private ItemTarget resolveContextItem(ConversationContext context, String reference) {
+    DocumentInterpretation pending = pendingInterpretation(context);
+    List<ItemTarget> targets = new ArrayList<>();
+    if (pending != null && pending.intent() == InterpretationIntent.ADD_ITEM) {
+      for (int index = 0; index < pending.items().size(); index++) {
+        targets.add(new ItemTarget(true, index, pending.items().get(index).description()));
+      }
+    }
+    for (int index = 0; index < context.items().size(); index++) {
+      targets.add(new ItemTarget(false, index, context.items().get(index).description()));
+    }
+    if (reference == null || reference.isBlank()) {
+      List<ItemTarget> pendingTargets = targets.stream().filter(ItemTarget::pending).toList();
+      if (pendingTargets.size() == 1) return pendingTargets.getFirst();
+      if (targets.size() == 1) return targets.getFirst();
+      throw new CorrectionException(
+          "Indica el producto cuyo precio o cantidad deseas cambiar.");
+    }
+    String normalized = normalizeForMatch(reference);
+    List<ItemTarget> exact = targets.stream()
+        .filter(target -> normalizeForMatch(target.description()).equals(normalized)).toList();
+    if (exact.size() == 1) return exact.getFirst();
+    List<ItemTarget> matches = targets.stream()
+        .filter(target -> normalizeForMatch(target.description()).contains(normalized)
+            || normalized.contains(normalizeForMatch(target.description())))
+        .toList();
+    if (matches.isEmpty()) {
+      throw new CorrectionException("No encontré un producto que coincida con " + reference + ".");
+    }
+    if (matches.size() > 1) {
+      throw new CorrectionException("La referencia coincide con varios productos: "
+          + matches.stream().map(ItemTarget::description).distinct()
+              .collect(java.util.stream.Collectors.joining(", ")) + ".");
+    }
+    return matches.getFirst();
+  }
+
+  private DocumentInterpretation pendingInterpretation(ConversationContext context) {
+    DocumentInterpretation value = context.lastInterpretation();
+    if (value == null) return null;
+    return context.reviewRequired() || value.hasMissingFields()
+        || !value.ambiguousFields().isEmpty() ? value : null;
+  }
+
+  private ProcessingResult applyDraftCorrection(
+      ConversationContext context, ConversationCommandParser.Command command, Instant now) {
+    InvoiceDraftResponse draft = invoiceDraftUseCase.findById(context.invoiceDraftId());
+    if (draft.status() != InvoiceDraftStatus.DRAFT) {
+      return result(context, "El borrador ya no está en estado DRAFT y no puede corregirse.",
+          "DRAFT_CORRECTION_REJECTED");
+    }
+    try {
+      InvoiceDocumentType type = draft.documentType();
+      IdentityDocumentType identityType = draft.recipientDocumentType();
+      String documentNumber = draft.recipientDocumentNumber();
+      List<CreateInvoiceItemRequest> items = draft.items().stream().map(item ->
+          new CreateInvoiceItemRequest(item.description(), item.unitCode(), item.quantity(),
+              item.unitPrice(), item.discount(), item.taxAffectation())).toList();
+      var correctedItems = new ArrayList<>(items);
+
+      if (command instanceof ConversationCommandParser.ChangeItemQuantityCommand correction) {
+        if (correction.quantity().signum() <= 0) {
+          throw new CorrectionException("La cantidad debe ser mayor que cero.");
+        }
+        int index = resolveItemIndex(correctedItems, correction.itemReference(), false);
+        CreateInvoiceItemRequest current = correctedItems.get(index);
+        correctedItems.set(index, copyItem(current, correction.quantity(), current.unitPrice()));
+      } else if (command instanceof ConversationCommandParser.ChangeItemPriceCommand correction) {
+        if (correction.unitPrice().signum() < 0) {
+          throw new CorrectionException("El precio no puede ser negativo.");
+        }
+        int index = resolveItemIndex(correctedItems, correction.itemReference(), true);
+        CreateInvoiceItemRequest current = correctedItems.get(index);
+        correctedItems.set(index, copyItem(current, current.quantity(), correction.unitPrice()));
+      } else if (command instanceof ConversationCommandParser.RemoveItemCommand correction) {
+        int index = resolveItemIndex(correctedItems, correction.itemReference(), false);
+        if (correctedItems.size() == 1) {
+          throw new CorrectionException("El borrador debe conservar al menos un producto.");
+        }
+        correctedItems.remove(index);
+      } else if (command instanceof ConversationCommandParser.CorrectRecipientCommand correction) {
+        validateDocumentNumber(correction.identityType(), correction.documentNumber());
+        if (type == InvoiceDocumentType.INVOICE
+            && correction.identityType() != IdentityDocumentType.RUC) {
+          throw new CorrectionException("Una factura requiere receptor con RUC.");
+        }
+        identityType = correction.identityType();
+        documentNumber = correction.documentNumber();
+      } else if (command instanceof ConversationCommandParser.CorrectDocumentTypeCommand correction) {
+        if (correction.documentType() == InvoiceDocumentType.INVOICE
+            && identityType != IdentityDocumentType.RUC) {
+          throw new CorrectionException(
+              "Para cambiar el borrador a factura, primero indica el RUC correcto.");
+        }
+        type = correction.documentType();
+      }
+
+      InvoiceDraftResponse updated = invoiceDraftUseCase.update(draft.id(),
+          new UpdateInvoiceDraftRequest(type, identityType, documentNumber, draft.currency(),
+              correctedItems));
+      ConversationContext synchronizedContext = context.synchronizeDraft(updated.documentType(),
+          updated.recipientDocumentType(), updated.recipientDocumentNumber(), updated.currency(),
+          updated.items().stream().map(item -> new ConversationDraftItem(item.id(),
+              item.description(), item.unitCode(), item.quantity(), item.unitPrice(),
+              item.discount(), item.taxAffectation())).toList(), now);
+      return result(synchronizedContext, "Borrador corregido. Nuevo total " + updated.currency() + " "
+          + updated.total().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString() + ".",
+          "DRAFT_CORRECTED");
+    } catch (CorrectionException | InvalidInvoiceDraftStateException | IllegalArgumentException exception) {
+      return result(context, exception.getMessage(), "DRAFT_CORRECTION_REJECTED");
+    }
+  }
+
+  private int resolveItemIndex(
+      List<CreateInvoiceItemRequest> items, String reference, boolean allowImplicit) {
+    if (reference == null || reference.isBlank()) {
+      if (allowImplicit && items.size() == 1) return 0;
+      throw new CorrectionException("Indica el producto que deseas corregir.");
+    }
+    String normalized = normalizeForMatch(reference);
+    List<Integer> exact = java.util.stream.IntStream.range(0, items.size()).boxed()
+        .filter(index -> normalizeForMatch(items.get(index).description()).equals(normalized))
+        .toList();
+    if (exact.size() == 1) return exact.getFirst();
+    List<Integer> matches = java.util.stream.IntStream.range(0, items.size()).boxed()
+        .filter(index -> normalizeForMatch(items.get(index).description()).contains(normalized)
+            || normalized.contains(normalizeForMatch(items.get(index).description())))
+        .toList();
+    if (matches.isEmpty()) throw new CorrectionException(
+        "No encontré un producto que coincida con " + reference + ".");
+    if (matches.size() > 1) throw new CorrectionException(
+        "La referencia coincide con varios productos. Especifica el nombre completo.");
+    return matches.getFirst();
+  }
+
+  private CreateInvoiceItemRequest copyItem(
+      CreateInvoiceItemRequest item, BigDecimal quantity, BigDecimal unitPrice) {
+    return new CreateInvoiceItemRequest(item.description(), item.unitCode(), quantity, unitPrice,
+        item.discount(), item.taxAffectation());
+  }
+
+  private void validateDocumentNumber(IdentityDocumentType type, String number) {
+    if (number == null || !number.matches("\\d{" + type.length() + "}")) {
+      throw new CorrectionException("El número no coincide con el tipo de documento.");
+    }
+  }
+
+  private String normalizeForMatch(String value) {
+    return Normalizer.normalize(value.strip().toLowerCase(java.util.Locale.ROOT),
+        Normalizer.Form.NFD).replaceAll("\\p{M}", "").replaceAll("\\s+", " ");
+  }
+
+  private String totalReply(ConversationContext context) {
+    return "Total acumulado " + context.currency() + " "
+        + calculateTotal(context).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+        + ". " + readyInstruction(context);
   }
 
   private ProcessingResult applyConfirmedInterpretation(
@@ -350,4 +670,12 @@ public class ConversationEngineService implements ConversationEngineUseCase {
 
   private record ProcessingResult(
       ConversationContext context, String reply, String commandName) {}
+
+  private record ItemTarget(boolean pending, int index, String description) {}
+
+  private static final class CorrectionException extends RuntimeException {
+    private CorrectionException(String message) {
+      super(message);
+    }
+  }
 }

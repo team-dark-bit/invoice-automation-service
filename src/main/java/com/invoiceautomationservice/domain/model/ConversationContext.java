@@ -108,6 +108,64 @@ public record ConversationContext(
         recipientDocumentNumber, currency, items, null, failure, true, now);
   }
 
+  public ConversationContext replaceItems(
+      List<ConversationDraftItem> correctedItems, Instant now) {
+    ensureMutable();
+    Objects.requireNonNull(correctedItems, "correctedItems are required");
+    ConversationFlowState next = stateForConfirmedData(documentType, recipientDocumentType,
+        recipientDocumentNumber, correctedItems);
+    return copy(next, documentType, recipientDocumentType, recipientDocumentNumber, currency,
+        correctedItems, null, null, false, now);
+  }
+
+  public ConversationContext correctRecipient(
+      IdentityDocumentType identityType, String documentNumber, Instant now) {
+    ensureMutable();
+    Objects.requireNonNull(identityType, "identityType is required");
+    String normalized = normalizeOptional(documentNumber);
+    if (normalized == null || normalized.length() != identityType.length()
+        || !normalized.matches("\\d+")) {
+      throw new IllegalArgumentException("El número no coincide con el tipo de documento.");
+    }
+    ConversationFlowState next = stateForConfirmedData(
+        documentType, identityType, normalized, items);
+    return copy(next, documentType, identityType, normalized, currency, items, null,
+        null, false, now);
+  }
+
+  public ConversationContext correctDocumentType(InvoiceDocumentType type, Instant now) {
+    ensureMutable();
+    Objects.requireNonNull(type, "documentType is required");
+    IdentityDocumentType correctedIdentity = recipientDocumentType;
+    String correctedNumber = recipientDocumentNumber;
+    if (type == InvoiceDocumentType.INVOICE && correctedIdentity != IdentityDocumentType.RUC) {
+      correctedIdentity = null;
+      correctedNumber = null;
+    }
+    ConversationFlowState next = stateForConfirmedData(
+        type, correctedIdentity, correctedNumber, items);
+    return copy(next, type, correctedIdentity, correctedNumber, currency, items, null, null,
+        false, now);
+  }
+
+  public ConversationContext discardPendingInterpretation(Instant now) {
+    ensureMutable();
+    ConversationFlowState next = stateForConfirmedData(
+        documentType, recipientDocumentType, recipientDocumentNumber, items);
+    return copy(next, documentType, recipientDocumentType, recipientDocumentNumber, currency,
+        items, null, null, false, now);
+  }
+
+  public ConversationContext synchronizeDraft(
+      InvoiceDocumentType type, IdentityDocumentType identityType, String documentNumber,
+      String newCurrency, List<ConversationDraftItem> correctedItems, Instant now) {
+    if (state != ConversationFlowState.DRAFT_CREATED || invoiceDraftId == null) {
+      throw new IllegalStateException("No existe un borrador conversacional para sincronizar.");
+    }
+    return copy(ConversationFlowState.DRAFT_CREATED, type, identityType, documentNumber,
+        newCurrency, correctedItems, invoiceDraftId, null, false, now);
+  }
+
   public ConversationContext confirmInterpretation(Instant now) {
     if (state != ConversationFlowState.NEEDS_REVIEW || lastInterpretation == null) {
       throw new IllegalStateException("No hay una interpretación pendiente de confirmación.");
@@ -183,6 +241,16 @@ public record ConversationContext(
   private static boolean ready(InvoiceDocumentType type, IdentityDocumentType identityType,
       String documentNumber, List<ConversationDraftItem> values) {
     return type != null && identityType != null && documentNumber != null && !values.isEmpty();
+  }
+
+  private static ConversationFlowState stateForConfirmedData(
+      InvoiceDocumentType type, IdentityDocumentType identityType, String documentNumber,
+      List<ConversationDraftItem> values) {
+    if (type == null && identityType == null && documentNumber == null && values.isEmpty()) {
+      return ConversationFlowState.EMPTY;
+    }
+    return ready(type, identityType, documentNumber, values)
+        ? ConversationFlowState.READY_TO_CREATE : ConversationFlowState.COLLECTING_DATA;
   }
 
   private static String normalizeOptional(String value) {

@@ -1169,6 +1169,16 @@
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('First natural item was confirmed', () => { const data = pm.response.json().data; pm.expect(data.context.itemCount).to.eql(1); pm.expect(data.context.state).to.eql('READY_TO_CREATE'); pm.expect(data.reply).to.include('PEN 7.00'); });"]}}]
         },
         {
+          "name": "Correction - Change implicit single-item price",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"text\":\"El precio es 3.80\",\"externalMessageId\":\"correction-price-1\"}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Single item price was corrected', () => { const data = pm.response.json().data; pm.expect(data.context.state).to.eql('READY_TO_CREATE'); pm.expect(data.reply).to.include('PEN 7.60'); });"]}}]
+        },
+        {
           "name": "Natural - Add breads and accumulate",
           "request": {
             "method": "POST",
@@ -1176,7 +1186,7 @@
             "body": {"mode": "raw", "raw": "{\"text\":\"Agrega tres panes a un sol\",\"externalMessageId\":\"natural-item-2\"}", "options": {"raw": {"language": "json"}}},
             "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Items and total were accumulated', () => { const data = pm.response.json().data; pm.expect(data.context.itemCount).to.eql(2); pm.expect(data.context.state).to.eql('READY_TO_CREATE'); pm.expect(data.reply).to.include('PEN 10.00'); });"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Items and total were accumulated', () => { const data = pm.response.json().data; pm.expect(data.context.itemCount).to.eql(2); pm.expect(data.context.state).to.eql('READY_TO_CREATE'); pm.expect(data.reply).to.include('PEN 10.60'); });"]}}]
         },
         {
           "name": "Natural - Detect inconsistent total",
@@ -1207,7 +1217,47 @@
             "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]},
             "description": "Demuestra que los comandos exactos siguen disponibles dentro del flujo natural."
           },
-          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Summary uses backend total', () => pm.expect(pm.response.json().data.reply).to.include('PEN 16.00'));"]}}]
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Summary uses backend total', () => pm.expect(pm.response.json().data.reply).to.include('PEN 16.60'));"]}}]
+        },
+        {
+          "name": "Correction - Change milk quantity",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Cambia la cantidad de Leche Gloria a 3\",\"externalMessageId\":\"correction-quantity-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Quantity and total were corrected', () => pm.expect(pm.response.json().data.reply).to.include('PEN 20.40'));"]}}]
+        },
+        {
+          "name": "Correction - Remove bread",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Elimina el pan\",\"externalMessageId\":\"correction-remove-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Bread was removed', () => pm.expect(pm.response.json().data.context.itemCount).to.eql(2));"]}}]
+        },
+        {
+          "name": "Correction - Change recipient DNI",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"El DNI correcto es 87654321\",\"externalMessageId\":\"correction-dni-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('DNI was corrected', () => pm.expect(pm.response.json().data.context.recipientDocumentNumber).to.eql('87654321'));"]}}]
+        },
+        {
+          "name": "Correction - Change receipt to invoice",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Es factura, no boleta\",\"externalMessageId\":\"correction-type-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Invoice now requests RUC', () => { const data = pm.response.json().data; pm.expect(data.context.documentType).to.eql('INVOICE'); pm.expect(data.context.state).to.eql('COLLECTING_DATA'); pm.expect(data.reply).to.include('RUC'); });"]}}]
+        },
+        {
+          "name": "Correction - Complete invoice RUC",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"El RUC correcto es {{taxId}}\",\"externalMessageId\":\"correction-ruc-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Invoice is ready after RUC correction', () => pm.expect(pm.response.json().data.context.state).to.eql('READY_TO_CREATE'));"]}}]
+        },
+        {
+          "name": "Correction - Generate editable draft",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"GENERAR\",\"externalMessageId\":\"correction-generate-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Draft was created', () => { const context = pm.response.json().data.context; pm.expect(context.state).to.eql('DRAFT_CREATED'); pm.environment.set('invoiceDraftId', context.invoiceDraftId); });"]}}]
+        },
+        {
+          "name": "Correction - Edit existing DRAFT",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Cambia la cantidad de Leche Gloria a 4\",\"externalMessageId\":\"correction-draft-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Existing DRAFT was edited', () => { const data = pm.response.json().data; pm.expect(data.context.state).to.eql('DRAFT_CREATED'); pm.expect(data.reply).to.include('Borrador corregido'); });"]}}]
+        },
+        {
+          "name": "Correction - Cancel edited draft",
+          "request": {"method": "POST", "header": [], "url": {"raw": "{{baseUrl}}/api/v1/invoice-drafts/{{invoiceDraftId}}/cancel", "host": ["{{baseUrl}}"], "path": ["api", "v1", "invoice-drafts", "{{invoiceDraftId}}", "cancel"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Edited draft is cancelled', () => pm.expect(pm.response.json().data.status).to.eql('CANCELLED'));"]}}]
         },
         {
           "name": "Close natural-language conversation",

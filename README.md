@@ -39,7 +39,7 @@ docker compose up -d postgres
 .\mvnw.cmd spring-boot:run
 ```
 
-La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER`, `AI_PROVIDER`, `AI_MODEL` y las variables `IMAGE_*` descritas en la sección de imágenes.
+La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER`, `AI_PROVIDER`, `AI_MODEL`, `AI_REVIEW_THRESHOLD` y las variables `IMAGE_*` descritas en la sección de imágenes.
 
 Credenciales sembradas exclusivamente para desarrollo:
 
@@ -308,11 +308,12 @@ El flujo determinista mantiene estos comandos exactos como alternativa:
 - `NUEVA FACTURA RUC 20123456789 PEN`
 - `AGREGAR 2 | Servicio mensual | 100.00`
 - `RESUMEN`
+- `CONFIRMAR`
 - `GENERAR`
 - `CANCELAR`
 - `AYUDA`
 
-El motor guarda el mensaje entrante y su respuesta, mantiene el contexto `EMPTY`, `COLLECTING_ITEMS` o `DRAFT_CREATED`, acumula ítems y utiliza `InvoiceDraftUseCase` para generar el mismo borrador que la API tradicional. No emite ni aprueba automáticamente: el resultado siempre queda como borrador revisable. Una nueva orden `NUEVA ...` reinicia los datos en preparación, mientras `CANCELAR` limpia el contexto sin eliminar borradores previamente creados.
+El motor guarda el mensaje entrante y su respuesta, acumula ítems y utiliza `InvoiceDraftUseCase` para generar el mismo borrador que la API tradicional. El estado avanza por `EMPTY`, `COLLECTING_DATA`, `PROCESSING_MEDIA`, `NEEDS_REVIEW`, `READY_TO_CREATE` y `DRAFT_CREATED`. `GENERAR` solo funciona desde `READY_TO_CREATE`; no emite ni aprueba automáticamente. Una nueva orden `NUEVA ...` reinicia los datos en preparación, `CONFIRMAR` acepta una detección pendiente completa y `CANCELAR` limpia el contexto sin eliminar borradores previamente creados.
 
 `externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
@@ -322,7 +323,7 @@ El mismo endpoint también admite texto natural mediante reglas locales, sin con
 - `Leche Gloria, dos unidades a 3.50`
 - `Agrega tres panes a un sol`
 
-El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantidad y precio unitario. Acepta números en cifras o palabras en español, incluyendo formas como `treinta y dos` y precios como `tres con cincuenta soles`. Los productos de mensajes sucesivos se acumulan en el contexto persistido y cada respuesta informa el total recalculado por el backend. Si faltan tipo de comprobante, receptor, cantidad o precio, el motor solicita esos datos sin inventarlos. Si el usuario incluye un `total` distinto de cantidad por precio, conserva el ítem pero advierte la diferencia y utiliza su propio cálculo.
+El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantidad y precio unitario. Acepta números en cifras o palabras en español, incluyendo formas como `treinta y dos` y precios como `tres con cincuenta soles`. Los productos confirmados de mensajes sucesivos se acumulan y cada respuesta informa el total recalculado por el backend. Si faltan tipo de comprobante, receptor, cantidad o precio, el estado permanece en `COLLECTING_DATA` y solicita esos datos sin inventarlos. Si el total informado no coincide con cantidad por precio, no incorpora todavía el ítem: pasa a `NEEDS_REVIEW` y exige `CONFIRMAR` o una corrección.
 
 Estas reglas cubren formatos controlados; no pretenden comprender cualquier redacción. Ante un mensaje no reconocido, la respuesta incluye los comandos exactos disponibles, que siguen teniendo prioridad sobre la interpretación natural.
 
@@ -346,23 +347,26 @@ Las imágenes temporales usan 30 días por defecto y una tarea diaria elimina la
 
 El puerto de salida `DocumentUnderstandingProvider` desacopla el motor conversacional del proveedor de IA u OCR. Expone entradas separadas para texto e imagen, pero ambas producen el mismo `DocumentInterpretation`. Cada solicitud conserva `companyId`, `conversationId` y un `InterpretationContextSnapshot` con los datos ya reunidos, permitiendo interpretaciones multi-turno sin entregar entidades JPA al proveedor.
 
-El resultado neutral contiene intención, tipo de comprobante, receptor, moneda, ítems candidatos, total reportado, confianza entre 0 y 1, campos faltantes y advertencias. Los ítems admiten datos parciales para solicitar aclaraciones posteriormente; las colecciones y el contenido binario se copian defensivamente. Una interpretación es solo una propuesta: no crea, aprueba ni emite comprobantes y los totales siempre deberán recalcularse con las reglas del dominio.
+El resultado neutral contiene intención, tipo de comprobante, receptor, moneda, ítems candidatos, total reportado, confianza entre 0 y 1, campos faltantes, campos ambiguos, errores de cálculo y advertencias. Los ítems admiten datos parciales para solicitar aclaraciones posteriormente; las colecciones y el contenido binario se copian defensivamente. Una interpretación es solo una propuesta: no crea, aprueba ni emite comprobantes y los totales siempre se recalculan con las reglas del dominio.
+
+La respuesta del motor incluye `context.review`, separando `detectedValues` de `confirmedValues`, además de `missingFields`, `ambiguousFields`, `confidence`, `calculationErrors` y `confirmationRequired`. El umbral se configura con `AI_REVIEW_THRESHOLD` y vale `0.80` por defecto. Una interpretación por debajo del umbral no modifica los valores confirmados: queda en `NEEDS_REVIEW` y el backend solicita confirmación. Los campos faltantes o ambiguos no pueden confirmarse hasta ser corregidos.
 
 `AI_PROVIDER` selecciona el adaptador y usa `mock` por defecto. Este adaptador conserva las reglas deterministas para texto, no realiza llamadas externas y, para imágenes, produce una interpretación neutral `UNKNOWN` con revisión manual. `AI_MODEL` identifica el modelo que usará el futuro adaptador remoto y su valor inicial es `gpt-5.4-nano`.
 
 ### Procesamiento multimodal asíncrono
 
-Una imagen nueva queda en `RECEIVED`. Después de confirmar la transacción de carga se publica un evento interno que un executor acotado procesa fuera del hilo HTTP. El trabajador bloquea el registro antes de reclamarlo, carga el binario mediante `ImageStoragePort`, construye `ImageInterpretationInput` con el contexto actual de la conversación y llama al mismo `DocumentUnderstandingProvider` utilizado por texto.
+Una imagen nueva queda en `RECEIVED` y la conversación pasa a `PROCESSING_MEDIA`. Después de confirmar la transacción de carga se publica un evento interno que un executor acotado procesa fuera del hilo HTTP. El trabajador bloquea el registro antes de reclamarlo, carga el binario mediante `ImageStoragePort`, construye `ImageInterpretationInput` con el contexto confirmado de la conversación y llama al mismo `DocumentUnderstandingProvider` utilizado por texto.
 
 El ciclo persistido es `RECEIVED -> PROCESSING -> EXTRACTED`; cualquier error recuperable durante la lectura o interpretación termina en `FAILED`. Se guardan número de intentos, fechas de inicio y fin, error seguro e interpretación estructurada. `POST /api/v1/conversations/{id}/images/{imageId}/process` encola una imagen `RECEIVED` o vuelve a encolar una imagen `FAILED`, y responde `202`; esto también permite recuperar un evento perdido tras un reinicio. `GET /api/v1/conversations/{id}/images/{imageId}` permite consultar el estado y el resultado.
 
-Con `AI_PROVIDER=mock`, la transición completa de forma determinista sin OCR externo: queda `EXTRACTED`, pero con intención `UNKNOWN`, confianza cero y advertencia de revisión manual. Esto permite probar almacenamiento, asincronía, auditoría y reintentos sin inventar datos tributarios. La interpretación almacenada es solo una propuesta: este flujo no modifica el contexto, no crea un borrador y nunca aprueba ni emite un comprobante automáticamente.
+Con `AI_PROVIDER=mock`, la transición completa de forma determinista sin OCR externo: la imagen queda `EXTRACTED` y la conversación en `NEEDS_REVIEW`, con intención `UNKNOWN`, confianza cero y advertencia de revisión manual. Esto permite probar almacenamiento, asincronía, auditoría y reintentos sin inventar datos tributarios. La interpretación se registra como dato detectado, pero no modifica valores confirmados, no crea un borrador y nunca aprueba ni emite un comprobante automáticamente.
 
 Configuración inicial:
 
 ```text
 AI_PROVIDER=mock
 AI_MODEL=gpt-5.4-nano
+AI_REVIEW_THRESHOLD=0.80
 ```
 
 La integración posterior con OpenAI deberá implementar `DocumentUnderstandingProvider`, enviar la imagen mediante la Responses API y seleccionarse con `AI_PROVIDER=openai`, sin cambiar el controlador ni el dominio. La clave deberá llegar por secreto de entorno y nunca persistirse. Antes de activar producción debe verificarse la disponibilidad vigente del modelo configurado.
@@ -398,6 +402,9 @@ JWT_SECRET=<secret-aleatorio-de-al-menos-32-caracteres>
 JWT_EXPIRATION_MS=3600000
 BILLING_PROVIDER=mock
 RECIPIENT_LOOKUP_PROVIDER=mock
+AI_PROVIDER=mock
+AI_MODEL=gpt-5.4-nano
+AI_REVIEW_THRESHOLD=0.80
 ```
 
 Spring Boot Actuator expone `health`, `info`, `metrics` y `prometheus`. Los endpoints `/actuator/health`, sus probes `/liveness` y `/readiness`, y `/actuator/info` son públicos para la plataforma; `/actuator/metrics/**` y `/actuator/prometheus` requieren un JWT válido. El indicador de Flyway reporta `DOWN` si existen migraciones pendientes, sin revelar credenciales. Las llamadas al proveedor registran los contadores `billing_submissions_total` y la duración `billing_submission_duration_seconds`, etiquetados solo por tipo documental y resultado para evitar cardinalidad no acotada.
@@ -558,5 +565,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 17. Interpretación determinista de texto natural, acumulación y validación de totales.
 18. Recepción, validación, deduplicación, retención y almacenamiento de imágenes.
 19. Procesamiento multimodal asíncrono, estados persistidos, reintento y proveedor mock.
+20. Datos detectados y confirmados, confianza, ambigüedades, errores de cálculo y revisión.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; aplicación revisable de la extracción al contexto; revisión y corrección; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; correcciones detalladas de valores detectados; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

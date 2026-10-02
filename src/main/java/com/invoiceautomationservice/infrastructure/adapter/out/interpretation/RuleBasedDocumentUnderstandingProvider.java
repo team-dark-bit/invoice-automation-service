@@ -58,14 +58,18 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
   }
 
   private DocumentInterpretation interpretHeader(TextInterpretationInput input, String text) {
-    InvoiceDocumentType documentType = text.contains("factura")
+    boolean mentionsInvoice = text.contains("factura");
+    boolean mentionsReceipt = text.contains("boleta");
+    InvoiceDocumentType documentType = mentionsInvoice
         ? InvoiceDocumentType.INVOICE
-        : text.contains("boleta") ? InvoiceDocumentType.SALES_RECEIPT
+        : mentionsReceipt ? InvoiceDocumentType.SALES_RECEIPT
             : input.context().documentType();
     Matcher dni = DNI.matcher(text);
     Matcher ruc = RUC.matcher(text);
-    IdentityDocumentType identityType = dni.find() ? IdentityDocumentType.DNI
-        : ruc.find() ? IdentityDocumentType.RUC : input.context().recipientDocumentType();
+    boolean mentionsDni = dni.find();
+    boolean mentionsRuc = ruc.find();
+    IdentityDocumentType identityType = mentionsDni ? IdentityDocumentType.DNI
+        : mentionsRuc ? IdentityDocumentType.RUC : input.context().recipientDocumentType();
     String documentNumber = null;
     if (identityType == IdentityDocumentType.DNI) {
       dni.reset();
@@ -86,12 +90,16 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
       missing.add("recipientDocumentNumber");
     }
     List<String> warnings = new ArrayList<>();
+    List<String> ambiguous = new ArrayList<>();
+    if (mentionsInvoice && mentionsReceipt) ambiguous.add("documentType");
+    if (mentionsDni && mentionsRuc) ambiguous.add("recipientDocument");
     if (documentType == InvoiceDocumentType.INVOICE && identityType == IdentityDocumentType.DNI) {
       warnings.add("Una factura requiere un receptor con RUC");
     }
     return new DocumentInterpretation(InterpretationSource.TEXT,
         InterpretationIntent.START_DOCUMENT, documentType, identityType, documentNumber,
-        currency, List.of(), null, confidence(missing), missing, warnings);
+        currency, List.of(), null, confidence(missing, ambiguous), missing, ambiguous,
+        List.of(), warnings);
   }
 
   private DocumentInterpretation interpretItem(TextInterpretationInput input, String text) {
@@ -143,19 +151,22 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
       missing.add("items[0].unitPrice");
     }
     List<String> warnings = new ArrayList<>();
+    List<String> calculationErrors = new ArrayList<>();
     if (reportedTotal != null && quantity != null && unitPrice != null) {
       BigDecimal calculated = quantity.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP);
       if (calculated.compareTo(reportedTotal.setScale(2, RoundingMode.HALF_UP)) != 0) {
-        warnings.add("El total indicado " + reportedTotal.toPlainString()
+        calculationErrors.add("El total indicado " + reportedTotal.toPlainString()
             + " no coincide con el total calculado " + calculated.toPlainString());
       }
     }
     var item = new InterpretedInvoiceItem(description, UnitCode.NIU, quantity, unitPrice,
-        BigDecimal.ZERO, TaxAffectation.TAXED, reportedTotal, confidence(missing), warnings);
+        BigDecimal.ZERO, TaxAffectation.TAXED, reportedTotal,
+        confidence(missing, List.of()), warnings);
     return new DocumentInterpretation(InterpretationSource.TEXT, InterpretationIntent.ADD_ITEM,
         input.context().documentType(), input.context().recipientDocumentType(),
         input.context().recipientDocumentNumber(), input.context().currency(), List.of(item),
-        reportedTotal, confidence(missing), missing, warnings);
+        reportedTotal, confidence(missing, List.of()), missing, List.of(), calculationErrors,
+        warnings);
   }
 
   private boolean looksLikeHeader(String text) {
@@ -187,7 +198,8 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
     return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
   }
 
-  private BigDecimal confidence(List<String> missing) {
+  private BigDecimal confidence(List<String> missing, List<String> ambiguous) {
+    if (!ambiguous.isEmpty()) return new BigDecimal("0.40");
     return missing.isEmpty() ? new BigDecimal("0.95") : new BigDecimal("0.60");
   }
 

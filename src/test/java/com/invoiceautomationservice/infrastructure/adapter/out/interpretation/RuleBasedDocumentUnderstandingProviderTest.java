@@ -39,6 +39,7 @@ class RuleBasedDocumentUnderstandingProviderTest {
       assertThat(item.unitPrice()).isEqualByComparingTo(new BigDecimal("3.5"));
     });
     assertThat(result.reportedTotal()).isEqualByComparingTo(new BigDecimal("7"));
+    assertThat(result.calculationErrors()).isEmpty();
     assertThat(result.warnings()).isEmpty();
   }
 
@@ -71,6 +72,17 @@ class RuleBasedDocumentUnderstandingProviderTest {
         .isEqualByComparingTo(new BigDecimal("32"));
     assertThat(SpanishNumberParser.parse("tres con cincuenta soles").orElseThrow())
         .isEqualByComparingTo(new BigDecimal("3.50"));
+  }
+
+  @Test
+  void marksConflictingDocumentValuesAsAmbiguous() {
+    var result = provider.interpretText(input(
+        "Quiero boleta y factura para DNI 12345678 y RUC 20123456789",
+        InterpretationContextSnapshot.empty()));
+
+    assertThat(result.ambiguousFields())
+        .containsExactly("documentType", "recipientDocument");
+    assertThat(result.confidence()).isEqualByComparingTo("0.40");
   }
 
   private TextInterpretationInput input(

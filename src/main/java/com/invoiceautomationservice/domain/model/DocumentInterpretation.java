@@ -20,6 +20,8 @@ public record DocumentInterpretation(
     BigDecimal reportedTotal,
     BigDecimal confidence,
     List<String> missingFields,
+    List<String> ambiguousFields,
+    List<String> calculationErrors,
     List<String> warnings
 ) {
   public DocumentInterpretation {
@@ -31,12 +33,24 @@ public record DocumentInterpretation(
     requireNonNegative(reportedTotal, "reportedTotal");
     requireConfidence(confidence);
     missingFields = copyNonBlank(missingFields, "missingFields");
+    ambiguousFields = copyNonBlank(ambiguousFields, "ambiguousFields");
+    calculationErrors = copyNonBlank(calculationErrors, "calculationErrors");
     warnings = copyNonBlank(warnings, "warnings");
   }
 
   public static DocumentInterpretation unsupported(InterpretationSource source, String warning) {
     return new DocumentInterpretation(source, InterpretationIntent.UNKNOWN, null, null, null,
-        null, List.of(), null, BigDecimal.ZERO, List.of(), List.of(warning));
+        null, List.of(), null, BigDecimal.ZERO, List.of(), List.of(), List.of(), List.of(warning));
+  }
+
+  public boolean requiresReview(BigDecimal minimumConfidence) {
+    Objects.requireNonNull(minimumConfidence, "minimumConfidence must not be null");
+    return confidence.compareTo(minimumConfidence) < 0
+        || !ambiguousFields.isEmpty() || !calculationErrors.isEmpty();
+  }
+
+  public boolean hasMissingFields() {
+    return !missingFields.isEmpty();
   }
 
   private static String normalizeOptional(String value) {

@@ -79,7 +79,7 @@ class PostgreSqlConcurrencyIT {
   void appliesEveryFlywayMigrationAndValidatesJpaSchema() {
     var applied = flyway.info().applied();
     assertThat(applied).isNotEmpty();
-    assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("24");
+    assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("25");
     assertThat(jdbc.queryForObject(
         "select count(*) from information_schema.tables where table_name in "
             + "('electronic_documents','audit_events','conversations','messages',"

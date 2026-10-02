@@ -3,6 +3,7 @@ package com.invoiceautomationservice.infrastructure.adapter.out.persistence;
 import com.invoiceautomationservice.application.port.out.ConversationContextRepository;
 import com.invoiceautomationservice.domain.model.ConversationContext;
 import com.invoiceautomationservice.domain.model.ConversationDraftItem;
+import com.invoiceautomationservice.domain.model.DocumentInterpretation;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.ConversationContextEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity.ConversationContextItemEntity;
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaConversationContextItemRepository;
@@ -12,12 +13,14 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import tools.jackson.databind.json.JsonMapper;
 
 @Repository
 @RequiredArgsConstructor
 public class ConversationContextPersistenceAdapter implements ConversationContextRepository {
   private final JpaConversationContextRepository contextRepository;
   private final JpaConversationContextItemRepository itemRepository;
+  private final JsonMapper jsonMapper;
 
   @Override
   public Optional<ConversationContext> findByConversationId(UUID conversationId) {
@@ -46,6 +49,8 @@ public class ConversationContextPersistenceAdapter implements ConversationContex
     entity.setRecipientDocumentNumber(value.recipientDocumentNumber());
     entity.setCurrency(value.currency());
     entity.setInvoiceDraftId(value.invoiceDraftId());
+    entity.setLastInterpretationJson(writeInterpretation(value.lastInterpretation()));
+    entity.setReviewRequired(value.reviewRequired());
     entity.setUpdatedAt(value.updatedAt());
     return entity;
   }
@@ -70,11 +75,30 @@ public class ConversationContextPersistenceAdapter implements ConversationContex
     return new ConversationContext(value.getConversationId(), value.getState(),
         value.getDocumentType(), value.getRecipientDocumentType(),
         value.getRecipientDocumentNumber(), value.getCurrency(), items,
-        value.getInvoiceDraftId(), value.getUpdatedAt());
+        value.getInvoiceDraftId(), readInterpretation(value.getLastInterpretationJson()),
+        value.isReviewRequired(), value.getUpdatedAt());
   }
 
   private ConversationDraftItem toDomain(ConversationContextItemEntity value) {
     return new ConversationDraftItem(value.getId(), value.getDescription(), value.getUnitCode(),
         value.getQuantity(), value.getUnitPrice(), value.getDiscount(), value.getTaxAffectation());
+  }
+
+  private String writeInterpretation(DocumentInterpretation interpretation) {
+    if (interpretation == null) return null;
+    try {
+      return jsonMapper.writeValueAsString(interpretation);
+    } catch (Exception exception) {
+      throw new IllegalStateException("could not serialize conversation interpretation", exception);
+    }
+  }
+
+  private DocumentInterpretation readInterpretation(String value) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return jsonMapper.readValue(value, DocumentInterpretation.class);
+    } catch (Exception exception) {
+      throw new IllegalStateException("could not deserialize conversation interpretation", exception);
+    }
   }
 }

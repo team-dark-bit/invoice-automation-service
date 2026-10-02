@@ -12,11 +12,13 @@ import com.invoiceautomationservice.application.model.StoredImageObject;
 import com.invoiceautomationservice.application.model.UploadConversationImageCommand;
 import com.invoiceautomationservice.application.port.in.ConversationImageUseCase;
 import com.invoiceautomationservice.application.port.out.ConversationImageRepository;
+import com.invoiceautomationservice.application.port.out.ConversationContextRepository;
 import com.invoiceautomationservice.application.port.out.ConversationRepository;
 import com.invoiceautomationservice.application.port.out.ImageStoragePort;
 import com.invoiceautomationservice.application.port.out.MessageRepository;
 import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.domain.model.CompanyPermission;
+import com.invoiceautomationservice.domain.model.ConversationContext;
 import com.invoiceautomationservice.domain.model.ConversationImage;
 import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
 import com.invoiceautomationservice.domain.model.ImageRetentionPolicy;
@@ -43,6 +45,7 @@ public class ConversationImageService implements ConversationImageUseCase {
 
   private final ConversationRepository conversationRepository;
   private final ConversationImageRepository imageRepository;
+  private final ConversationContextRepository contextRepository;
   private final MessageRepository messageRepository;
   private final ImageStoragePort storage;
   private final ImageInspector inspector;
@@ -96,6 +99,9 @@ public class ConversationImageService implements ConversationImageUseCase {
       auditTrailService.record(conversation.companyId(), AuditAction.IMAGE_STORED,
           "CONVERSATION_IMAGE", image.id(), "SUCCESS",
           inspected.format() + " " + inspected.width() + "x" + inspected.height());
+      ConversationContext context = contextRepository.findByConversationId(conversationId)
+          .orElseGet(() -> ConversationContext.empty(conversationId, now));
+      contextRepository.save(context.markProcessingMedia(now));
       eventPublisher.publishEvent(new ImageProcessingRequested(image.id()));
       return toResponse(image, false);
     } catch (RuntimeException exception) {
@@ -136,6 +142,10 @@ public class ConversationImageService implements ConversationImageUseCase {
     ensureActive(image);
     ConversationImage queued = image.processingStatus() == ImageProcessingStatus.RECEIVED
         ? image : imageRepository.save(image.retry());
+    Instant now = Instant.now(clock);
+    ConversationContext context = contextRepository.findByConversationId(conversationId)
+        .orElseGet(() -> ConversationContext.empty(conversationId, now));
+    contextRepository.save(context.markProcessingMedia(now));
     eventPublisher.publishEvent(new ImageProcessingRequested(image.id()));
     return toResponse(queued, false);
   }

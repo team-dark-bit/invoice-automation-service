@@ -19,6 +19,7 @@ recipient:
 ai:
   provider: ${AI_PROVIDER:mock}
   model: ${AI_MODEL:gpt-5.4-nano}
+  review-threshold: ${AI_REVIEW_THRESHOLD:0.80}
 
 image-storage:
   provider: ${IMAGE_STORAGE_PROVIDER:local}

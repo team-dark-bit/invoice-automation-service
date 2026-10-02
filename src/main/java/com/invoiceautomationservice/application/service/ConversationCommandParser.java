@@ -39,6 +39,7 @@ public class ConversationCommandParser {
     return switch (normalized.toUpperCase(Locale.ROOT)) {
       case "AYUDA", "HELP", "MENU" -> new HelpCommand();
       case "RESUMEN" -> new SummaryCommand();
+      case "CONFIRMAR", "SI", "SÍ" -> new ConfirmCommand();
       case "GENERAR" -> new GenerateCommand();
       case "CANCELAR" -> new ResetCommand();
       default -> new UnknownCommand();
@@ -51,13 +52,14 @@ public class ConversationCommandParser {
   }
 
   public sealed interface Command permits StartCommand, AddItemCommand, HelpCommand,
-      SummaryCommand, GenerateCommand, ResetCommand, UnknownCommand {}
+      SummaryCommand, ConfirmCommand, GenerateCommand, ResetCommand, UnknownCommand {}
   public record StartCommand(InvoiceDocumentType documentType,
       IdentityDocumentType identityType, String documentNumber, String currency) implements Command {}
   public record AddItemCommand(String description, BigDecimal quantity,
       BigDecimal unitPrice) implements Command {}
   public record HelpCommand() implements Command {}
   public record SummaryCommand() implements Command {}
+  public record ConfirmCommand() implements Command {}
   public record GenerateCommand() implements Command {}
   public record ResetCommand() implements Command {}
   public record UnknownCommand() implements Command {}

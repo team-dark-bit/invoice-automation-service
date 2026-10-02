@@ -21,6 +21,7 @@ class ConversationContextTest {
 
     ConversationContext generated = context.markDraftCreated(draftId, now);
 
+    assertThat(context.state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
     assertThat(generated.state()).isEqualTo(ConversationFlowState.DRAFT_CREATED);
     assertThat(generated.invoiceDraftId()).isEqualTo(draftId);
     assertThat(generated.items()).hasSize(1);

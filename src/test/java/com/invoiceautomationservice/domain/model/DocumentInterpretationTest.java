@@ -22,7 +22,8 @@ class DocumentInterpretationTest {
         InterpretationSource.TEXT, InterpretationIntent.ADD_ITEM,
         InvoiceDocumentType.SALES_RECEIPT, IdentityDocumentType.DNI,
         " 12345678 ", " pen ", items, new BigDecimal("7.00"),
-        new BigDecimal("0.95"), missingFields, List.of(" verify recipient "));
+        new BigDecimal("0.95"), missingFields, List.of(), List.of(),
+        List.of(" verify recipient "));
     items.clear();
     missingFields.clear();
 
@@ -39,7 +40,7 @@ class DocumentInterpretationTest {
     assertThatThrownBy(() -> new DocumentInterpretation(
         InterpretationSource.IMAGE, InterpretationIntent.UNKNOWN,
         null, null, null, null, List.of(), null, new BigDecimal("1.01"),
-        List.of(), List.of()))
+        List.of(), List.of(), List.of(), List.of()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("confidence");
   }

@@ -11,6 +11,7 @@ import com.invoiceautomationservice.application.model.StoredImageObject;
 import com.invoiceautomationservice.application.model.ImageProcessingRequested;
 import com.invoiceautomationservice.application.model.UploadConversationImageCommand;
 import com.invoiceautomationservice.application.port.out.ConversationImageRepository;
+import com.invoiceautomationservice.application.port.out.ConversationContextRepository;
 import com.invoiceautomationservice.application.port.out.ConversationRepository;
 import com.invoiceautomationservice.application.port.out.ImageStoragePort;
 import com.invoiceautomationservice.application.port.out.MessageRepository;
@@ -18,6 +19,7 @@ import com.invoiceautomationservice.domain.model.CompanyPermission;
 import com.invoiceautomationservice.domain.model.Conversation;
 import com.invoiceautomationservice.domain.model.ConversationChannel;
 import com.invoiceautomationservice.domain.model.ConversationImage;
+import com.invoiceautomationservice.domain.model.ConversationFlowState;
 import com.invoiceautomationservice.domain.model.ImageFormat;
 import com.invoiceautomationservice.domain.model.ImageRetentionPolicy;
 import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
@@ -39,6 +41,7 @@ class ConversationImageServiceTest {
   private static final Instant NOW = Instant.parse("2026-10-01T15:00:00Z");
   private ConversationRepository conversations;
   private ConversationImageRepository images;
+  private ConversationContextRepository contexts;
   private MessageRepository messages;
   private ImageStoragePort storage;
   private CompanyAccessService access;
@@ -50,6 +53,7 @@ class ConversationImageServiceTest {
   void setUp() {
     conversations = mock(ConversationRepository.class);
     images = mock(ConversationImageRepository.class);
+    contexts = mock(ConversationContextRepository.class);
     messages = mock(MessageRepository.class);
     storage = mock(ImageStoragePort.class);
     access = mock(CompanyAccessService.class);
@@ -62,9 +66,11 @@ class ConversationImageServiceTest {
     when(conversations.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     when(messages.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     when(images.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(contexts.findByConversationId(any())).thenReturn(Optional.empty());
+    when(contexts.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     when(storage.store(any(), any(), any())).thenReturn(new StoredImageObject(
         "12/123e4567-e89b-12d3-a456-426614174000.png"));
-    service = new ConversationImageService(conversations, images, messages, storage,
+    service = new ConversationImageService(conversations, images, contexts, messages, storage,
         new ImageInspector(properties), properties, access, mock(AuditTrailService.class),
         events, Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -83,6 +89,8 @@ class ConversationImageServiceTest {
     assertThat(response.duplicate()).isFalse();
     verify(storage).store(any(), org.mockito.ArgumentMatchers.eq(ImageFormat.PNG), any());
     verify(messages).save(any(Message.class));
+    verify(contexts).save(org.mockito.ArgumentMatchers.argThat(
+        context -> context.state() == ConversationFlowState.PROCESSING_MEDIA));
     verify(access).requirePermission("company-1", CompanyPermission.CONVERSATION_MANAGE);
   }
 

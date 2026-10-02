@@ -17,6 +17,7 @@ import com.invoiceautomationservice.domain.model.ConversationChannel;
 import com.invoiceautomationservice.domain.model.ConversationContext;
 import com.invoiceautomationservice.domain.model.ConversationFlowState;
 import com.invoiceautomationservice.infrastructure.adapter.out.interpretation.RuleBasedDocumentUnderstandingProvider;
+import com.invoiceautomationservice.infrastructure.config.AiProperties;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -30,6 +31,7 @@ class ConversationEngineServiceTest {
   private ConversationContextRepository contexts;
   private InvoiceDraftUseCase drafts;
   private ConversationEngineService engine;
+  private AiProperties aiProperties;
 
   @BeforeEach
   void setUp() {
@@ -51,9 +53,10 @@ class ConversationEngineServiceTest {
       stored.set(value);
       return value;
     });
+    aiProperties = new AiProperties();
     engine = new ConversationEngineService(conversations, contexts, messages, drafts, access,
         new ConversationCommandParser(), new RuleBasedDocumentUnderstandingProvider(),
-        mock(AuditTrailService.class),
+        aiProperties, mock(AuditTrailService.class),
         Clock.fixed(Instant.parse("2026-09-23T15:00:00Z"), ZoneOffset.UTC));
   }
 
@@ -89,7 +92,7 @@ class ConversationEngineServiceTest {
     var secondItem = engine.process(conversation.id(),
         "Agrega tres panes a un sol", "n3");
 
-    assertThat(started.context().state()).isEqualTo(ConversationFlowState.COLLECTING_ITEMS);
+    assertThat(started.context().state()).isEqualTo(ConversationFlowState.COLLECTING_DATA);
     assertThat(firstItem.context().itemCount()).isEqualTo(1);
     assertThat(secondItem.context().itemCount()).isEqualTo(2);
     assertThat(secondItem.reply()).contains("Total acumulado PEN 10.00");
@@ -100,23 +103,67 @@ class ConversationEngineServiceTest {
     var partial = engine.process(conversation.id(), "Quiero una boleta", "p1");
     var completed = engine.process(conversation.id(), "DNI 12345678", "p2");
 
-    assertThat(partial.context().state()).isEqualTo(ConversationFlowState.EMPTY);
-    assertThat(partial.context().documentType()).isNotNull();
+    assertThat(partial.context().state()).isEqualTo(ConversationFlowState.COLLECTING_DATA);
+    assertThat(partial.context().documentType()).isNull();
+    assertThat(partial.context().review().detectedValues())
+        .containsEntry("documentType", "SALES_RECEIPT");
     assertThat(partial.reply()).contains("Falta indicar").contains("DNI o RUC");
-    assertThat(completed.context().state()).isEqualTo(ConversationFlowState.COLLECTING_ITEMS);
+    assertThat(completed.context().state()).isEqualTo(ConversationFlowState.COLLECTING_DATA);
     assertThat(completed.context().recipientDocumentNumber()).isEqualTo("12345678");
   }
 
   @Test
-  void warnsWhenReportedTotalDoesNotMatchBackendCalculation() {
+  void requiresConfirmationWhenReportedTotalDoesNotMatchBackendCalculation() {
     engine.process(conversation.id(), "Quiero una boleta para DNI 12345678", "w1");
 
     var result = engine.process(conversation.id(),
         "Leche Gloria, dos unidades, precio unitario 3.50 total = 8", "w2");
 
-    assertThat(result.context().itemCount()).isEqualTo(1);
-    assertThat(result.reply()).contains("Advertencia")
-        .contains("no coincide con el total calculado 7.00")
-        .contains("Se usará el total calculado");
+    assertThat(result.context().state()).isEqualTo(ConversationFlowState.NEEDS_REVIEW);
+    assertThat(result.context().itemCount()).isZero();
+    assertThat(result.context().review().calculationErrors())
+        .singleElement().asString().contains("no coincide con el total calculado 7.00");
+    assertThat(result.reply()).contains("CONFIRMAR");
+
+    var confirmed = engine.process(conversation.id(), "CONFIRMAR", "w3");
+    assertThat(confirmed.context().state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
+    assertThat(confirmed.context().itemCount()).isEqualTo(1);
+  }
+
+  @Test
+  void requestsConfirmationWhenConfidenceIsBelowConfiguredThreshold() {
+    aiProperties.setReviewThreshold(new java.math.BigDecimal("0.99"));
+
+    var detected = engine.process(conversation.id(),
+        "Quiero una boleta para DNI 12345678", "c1");
+
+    assertThat(detected.context().state()).isEqualTo(ConversationFlowState.NEEDS_REVIEW);
+    assertThat(detected.context().review().confirmationRequired()).isTrue();
+    assertThat(detected.context().review().detectedValues())
+        .containsEntry("recipientDocumentNumber", "12345678");
+    assertThat(detected.context().review().confirmedValues())
+        .doesNotContainKey("recipientDocumentNumber");
+    assertThat(detected.reply()).contains("confianza").contains("CONFIRMAR");
+
+    var confirmed = engine.process(conversation.id(), "CONFIRMAR", "c2");
+    assertThat(confirmed.context().state()).isEqualTo(ConversationFlowState.COLLECTING_DATA);
+    assertThat(confirmed.context().review().confirmedValues())
+        .containsEntry("recipientDocumentNumber", "12345678");
+    assertThat(confirmed.context().review().confirmationRequired()).isFalse();
+  }
+
+  @Test
+  void exposesAmbiguousValuesAndDoesNotAllowBlindConfirmation() {
+    var ambiguous = engine.process(conversation.id(),
+        "Quiero boleta y factura para DNI 12345678 y RUC 20123456789", "a1");
+
+    assertThat(ambiguous.context().state()).isEqualTo(ConversationFlowState.NEEDS_REVIEW);
+    assertThat(ambiguous.context().review().ambiguousFields())
+        .containsExactly("documentType", "recipientDocument");
+    assertThat(ambiguous.reply()).contains("ambiguos");
+
+    var rejected = engine.process(conversation.id(), "CONFIRMAR", "a2");
+    assertThat(rejected.context().state()).isEqualTo(ConversationFlowState.NEEDS_REVIEW);
+    assertThat(rejected.reply()).contains("ambiguos");
   }
 }

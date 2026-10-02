@@ -10,6 +10,7 @@ import com.invoiceautomationservice.domain.model.ConversationImage;
 import com.invoiceautomationservice.domain.model.DocumentInterpretation;
 import com.invoiceautomationservice.domain.model.ImageProcessingStatus;
 import com.invoiceautomationservice.domain.model.InterpretationContextSnapshot;
+import com.invoiceautomationservice.domain.model.InterpretationSource;
 import com.invoiceautomationservice.domain.model.InterpretedInvoiceItem;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -56,7 +57,12 @@ public class ImageProcessingStateService {
     if (image == null || image.processingStatus() != ImageProcessingStatus.PROCESSING) return;
     ConversationImage completed = imageRepository.save(
         image.extracted(interpretation, Instant.now(clock)));
-    String companyId = conversationRepository.findById(image.conversationId()).companyId();
+    String companyId = conversationRepository.findByIdForUpdate(image.conversationId()).companyId();
+    ConversationContext context = contextRepository.findByConversationId(image.conversationId())
+        .orElseGet(() -> ConversationContext.empty(image.conversationId(), Instant.now(clock)));
+    contextRepository.save(context.stageInterpretation(
+        interpretation, com.invoiceautomationservice.domain.model.ConversationFlowState.NEEDS_REVIEW,
+        Instant.now(clock)));
     auditTrailService.recordAs("system", companyId, AuditAction.IMAGE_EXTRACTED,
         "CONVERSATION_IMAGE", image.id(), "SUCCESS",
         "Intent: " + completed.interpretation().intent()
@@ -70,7 +76,11 @@ public class ImageProcessingStateService {
     String safeError = error == null || error.isBlank() ? "Multimodal processing failed" : error;
     if (safeError.length() > 1000) safeError = safeError.substring(0, 1000);
     imageRepository.save(image.failProcessing(safeError, Instant.now(clock)));
-    String companyId = conversationRepository.findById(image.conversationId()).companyId();
+    String companyId = conversationRepository.findByIdForUpdate(image.conversationId()).companyId();
+    ConversationContext context = contextRepository.findByConversationId(image.conversationId())
+        .orElseGet(() -> ConversationContext.empty(image.conversationId(), Instant.now(clock)));
+    contextRepository.save(context.markMediaFailed(DocumentInterpretation.unsupported(
+        InterpretationSource.IMAGE, safeError), Instant.now(clock)));
     auditTrailService.recordAs("system", companyId, AuditAction.IMAGE_PROCESSING_FAILED,
         "CONVERSATION_IMAGE", image.id(), "FAILED", safeError);
   }

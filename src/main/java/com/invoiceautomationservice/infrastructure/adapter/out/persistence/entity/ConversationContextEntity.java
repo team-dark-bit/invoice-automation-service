@@ -27,5 +27,8 @@ public class ConversationContextEntity {
   @Column(name = "recipient_document_number", length = 20) private String recipientDocumentNumber;
   @Column(nullable = false, length = 3) private String currency;
   @Column(name = "invoice_draft_id") private UUID invoiceDraftId;
+  @Column(name = "last_interpretation_json", columnDefinition = "TEXT")
+  private String lastInterpretationJson;
+  @Column(name = "review_required", nullable = false) private boolean reviewRequired;
   @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 }

@@ -59,7 +59,7 @@ public record ConversationContext(
     var updated = new ArrayList<>(items);
     for (InterpretedInvoiceItem item : interpretation.items()) {
       updated.add(new ConversationDraftItem(UUID.randomUUID(), item.description(), item.unitCode(),
-          item.quantity(), item.unitPrice(), item.discount(), item.taxAffectation()));
+          item.quantity(), item.unitPrice(), item.discount(), TaxAffectation.TAXED));
     }
     ConversationFlowState next = ready(documentType, recipientDocumentType,
         recipientDocumentNumber, updated)
@@ -183,9 +183,16 @@ public record ConversationContext(
   }
 
   public ConversationContext markDraftCreated(UUID draftId, Instant now) {
-    ensureReadyToCreate();
+    ensureAwaitingDraftConfirmation();
     return copy(ConversationFlowState.DRAFT_CREATED, documentType, recipientDocumentType,
         recipientDocumentNumber, currency, items, draftId, lastInterpretation, false, now);
+  }
+
+  public ConversationContext requestDraftConfirmation(Instant now) {
+    ensureReadyToCreate();
+    return copy(ConversationFlowState.AWAITING_DRAFT_CONFIRMATION, documentType,
+        recipientDocumentType, recipientDocumentNumber, currency, items, null,
+        lastInterpretation, false, now);
   }
 
   public ConversationContext reset(Instant now) {
@@ -196,6 +203,13 @@ public record ConversationContext(
     if (state != ConversationFlowState.READY_TO_CREATE) {
       throw new IllegalStateException(
           "La conversación todavía no está lista para crear el borrador.");
+    }
+  }
+
+  public void ensureAwaitingDraftConfirmation() {
+    if (state != ConversationFlowState.AWAITING_DRAFT_CONFIRMATION) {
+      throw new IllegalStateException(
+          "Primero solicita el resumen y confirma la creación del borrador.");
     }
   }
 
@@ -220,7 +234,8 @@ public record ConversationContext(
             || recipientDocumentNumber != null || !items.isEmpty() || invoiceDraftId != null)) {
       throw new IllegalArgumentException("empty context cannot contain confirmed data");
     }
-    if (state == ConversationFlowState.READY_TO_CREATE
+    if ((state == ConversationFlowState.READY_TO_CREATE
+        || state == ConversationFlowState.AWAITING_DRAFT_CONFIRMATION)
         && !ready(documentType, recipientDocumentType, recipientDocumentNumber, items)) {
       throw new IllegalArgumentException("ready context requires header and items");
     }

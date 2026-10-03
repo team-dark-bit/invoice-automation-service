@@ -66,7 +66,7 @@ class ConversationEngineServiceTest {
   }
 
   @Test
-  void buildsDraftThroughExistingUseCase() {
+  void summarizesAndRequiresConfirmationBeforeBuildingDraft() {
     engine.process(conversation.id(), "NUEVA BOLETA DNI 12345678 PEN", "m1");
     engine.process(conversation.id(), "AGREGAR 2 | Servicio | 100.00", "m2");
     InvoiceDraftResponse draft = mock(InvoiceDraftResponse.class);
@@ -74,11 +74,52 @@ class ConversationEngineServiceTest {
     when(draft.id()).thenReturn(draftId);
     when(drafts.create(any())).thenReturn(draft);
 
-    var result = engine.process(conversation.id(), "GENERAR", "m3");
+    var summary = engine.process(conversation.id(), "GENERAR", "m3");
 
+    assertThat(summary.context().state())
+        .isEqualTo(ConversationFlowState.AWAITING_DRAFT_CONFIRMATION);
+    assertThat(summary.context().invoiceDraftId()).isNull();
+    assertThat(summary.reply()).contains("Detecté:")
+        .contains("Boleta para DNI 12345678")
+        .contains("2 Servicio × S/ 100.00")
+        .contains("Total calculado: S/ 200.00")
+        .contains("¿Confirmas la creación del borrador?");
+    verify(drafts, never()).create(any());
+
+    var result = engine.process(conversation.id(), "CONFIRMAR", "m4");
     assertThat(result.context().state()).isEqualTo(ConversationFlowState.DRAFT_CREATED);
     assertThat(result.context().invoiceDraftId()).isEqualTo(draftId);
     verify(drafts).create(any());
+  }
+
+  @Test
+  void doesNotCreateDraftWhenConfirmationWasNotRequested() {
+    engine.process(conversation.id(), "NUEVA BOLETA DNI 12345678 PEN", "uc1");
+    engine.process(conversation.id(), "AGREGAR 1 | Servicio | 10.00", "uc2");
+
+    var result = engine.process(conversation.id(), "CONFIRMAR", "uc3");
+
+    assertThat(result.context().state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
+    assertThat(result.reply()).contains("No hay una interpretación pendiente");
+    verify(drafts, never()).create(any());
+  }
+
+  @Test
+  void correctionInvalidatesPendingDraftConfirmation() {
+    engine.process(conversation.id(), "NUEVA BOLETA DNI 12345678 PEN", "ic1");
+    engine.process(conversation.id(), "AGREGAR 1 | Servicio | 10.00", "ic2");
+    var summary = engine.process(conversation.id(), "GENERAR", "ic3");
+    assertThat(summary.context().state())
+        .isEqualTo(ConversationFlowState.AWAITING_DRAFT_CONFIRMATION);
+
+    var corrected = engine.process(conversation.id(),
+        "Cambia la cantidad de Servicio a 2", "ic4");
+    assertThat(corrected.context().state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
+    assertThat(corrected.reply()).contains("PEN 20.00");
+
+    var rejected = engine.process(conversation.id(), "CONFIRMAR", "ic5");
+    assertThat(rejected.context().state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
+    verify(drafts, never()).create(any());
   }
 
   @Test
@@ -247,6 +288,7 @@ class ConversationEngineServiceTest {
     when(created.id()).thenReturn(draftId);
     when(drafts.create(any())).thenReturn(created);
     engine.process(conversation.id(), "GENERAR", "dc3");
+    engine.process(conversation.id(), "CONFIRMAR", "dc3-confirm");
 
     InvoiceItemResponse originalItem = new InvoiceItemResponse(java.util.UUID.randomUUID(),
         "Servicio", new java.math.BigDecimal("2"), new java.math.BigDecimal("100.00"),
@@ -280,6 +322,7 @@ class ConversationEngineServiceTest {
     when(created.id()).thenReturn(draftId);
     when(drafts.create(any())).thenReturn(created);
     engine.process(conversation.id(), "GENERAR", "dr3");
+    engine.process(conversation.id(), "CONFIRMAR", "dr3-confirm");
     when(drafts.findById(draftId)).thenReturn(draftResponse(draftId,
         new InvoiceItemResponse(java.util.UUID.randomUUID(), "Servicio",
             java.math.BigDecimal.ONE, java.math.BigDecimal.TEN, java.math.BigDecimal.TEN),

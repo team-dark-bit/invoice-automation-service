@@ -313,7 +313,7 @@ El flujo determinista mantiene estos comandos exactos como alternativa:
 - `CANCELAR`
 - `AYUDA`
 
-El motor guarda el mensaje entrante y su respuesta, acumula ítems y utiliza `InvoiceDraftUseCase` para generar el mismo borrador que la API tradicional. El estado avanza por `EMPTY`, `COLLECTING_DATA`, `PROCESSING_MEDIA`, `NEEDS_REVIEW`, `READY_TO_CREATE` y `DRAFT_CREATED`. `GENERAR` solo funciona desde `READY_TO_CREATE`; no emite ni aprueba automáticamente. Una nueva orden `NUEVA ...` reinicia los datos en preparación, `CONFIRMAR` acepta una detección pendiente completa y `CANCELAR` limpia el contexto sin eliminar borradores previamente creados.
+El motor guarda el mensaje entrante y su respuesta, acumula ítems y utiliza `InvoiceDraftUseCase` para generar el mismo borrador que la API tradicional. El estado avanza por `EMPTY`, `COLLECTING_DATA`, `PROCESSING_MEDIA`, `NEEDS_REVIEW`, `READY_TO_CREATE`, `AWAITING_DRAFT_CONFIRMATION` y `DRAFT_CREATED`. `GENERAR` solo funciona desde `READY_TO_CREATE` y muestra el resumen sin persistir todavía un borrador. Un `CONFIRMAR` posterior crea el borrador. Una nueva orden `NUEVA ...` reinicia los datos en preparación y `CANCELAR` limpia el contexto sin eliminar borradores previamente creados.
 
 `externalMessageId` hace idempotente la recepción: un reenvío del mismo mensaje dentro de la conversación responde `Mensaje ya procesado` sin repetir comandos. La migración `V22__add_conversation_engine_context.sql` persiste el contexto y sus ítems; así el flujo continúa después de reinicios de la aplicación. La futura integración de WhatsApp solo deberá adaptar su webhook a este contrato.
 
@@ -344,6 +344,14 @@ Los nombres se comparan sin distinguir mayúsculas ni tildes y permiten referenc
 Cuando la última interpretación aún contiene un producto parcial, las correcciones completan sus campos detectados sin crear un segundo ítem. Al quedar completo y consistente, pasa a los valores confirmados. Si persiste una ambigüedad o un error de cálculo, permanece en `NEEDS_REVIEW`.
 
 Si el contexto está en `DRAFT_CREATED`, el motor consulta el borrador vinculado. Solo si continúa en estado tributario `DRAFT` construye un `UpdateInvoiceDraftRequest` con todos los datos e ítems, invoca `InvoiceDraftUseCase.update` y sincroniza el contexto con la respuesta. Se conservan unidad, descuento y afectación tributaria de cada ítem. Un borrador aprobado, emitido o cancelado no puede modificarse conversacionalmente.
+
+### Confirmación antes de crear el borrador
+
+La creación conversacional exige `interpretación → resumen → confirmación → InvoiceDraft`. Cuando los datos están en `READY_TO_CREATE`, el comando `GENERAR` cambia el contexto a `AWAITING_DRAFT_CONFIRMATION` y devuelve un resumen legible con tipo de comprobante, receptor, productos, cantidades, precios y total calculado. En este paso `invoiceDraftId` continúa vacío y no se invoca `InvoiceDraftUseCase.create`.
+
+Solo un mensaje posterior `CONFIRMAR` crea el borrador y avanza a `DRAFT_CREATED`. Si antes de confirmar llega una corrección o se agrega información, la confirmación queda invalidada y el contexto vuelve a calcularse; debe ejecutarse nuevamente `GENERAR` para revisar el resumen actualizado. Los reenvíos conservan la idempotencia mediante `externalMessageId`.
+
+La interpretación de IA es únicamente una fuente de datos candidatos. Su afectación tributaria se ignora al incorporar productos y se aplica la política predeterminada del dominio. El motor tampoco reserva series o correlativos, aprueba, emite ni modifica comprobantes emitidos. Esas acciones permanecen en sus casos de uso y reglas de dominio independientes. `V26__add_draft_confirmation_state.sql` incorpora el nuevo estado persistido y sus restricciones.
 
 ### Recepción y almacenamiento de imágenes
 
@@ -585,5 +593,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 19. Procesamiento multimodal asíncrono, estados persistidos, reintento y proveedor mock.
 20. Datos detectados y confirmados, confianza, ambigüedades, errores de cálculo y revisión.
 21. Correcciones conversacionales del contexto pendiente y de borradores editables.
+22. Resumen y confirmación explícita antes de crear un borrador conversacional.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; correcciones detalladas de valores detectados; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

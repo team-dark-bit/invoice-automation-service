@@ -50,7 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConversationEngineService implements ConversationEngineUseCase {
   private static final String HELP = "Comandos: NUEVA BOLETA DNI 12345678 PEN; "
       + "NUEVA FACTURA RUC 20123456789 PEN; AGREGAR cantidad | descripción | precio; "
-      + "RESUMEN; CONFIRMAR; GENERAR; CANCELAR. Correcciones: CAMBIA LA CANTIDAD DE "
+      + "RESUMEN; GENERAR para revisar; CONFIRMAR para crear el borrador; CANCELAR. "
+      + "Correcciones: CAMBIA LA CANTIDAD DE "
       + "producto A valor; CAMBIA EL PRECIO DE producto A valor; ELIMINA producto; "
       + "EL DNI/RUC CORRECTO ES número; ES FACTURA/BOLETA.";
 
@@ -148,10 +149,13 @@ public class ConversationEngineService implements ConversationEngineUseCase {
           + review, "SUMMARY");
     }
     if (command instanceof ConversationCommandParser.ConfirmCommand) {
+      if (context.state() == ConversationFlowState.AWAITING_DRAFT_CONFIRMATION) {
+        return createConfirmedDraft(companyId, context, now);
+      }
       try {
         ConversationContext updated = context.confirmInterpretation(now);
         return result(updated, updated.state() == ConversationFlowState.READY_TO_CREATE
-            ? "Datos confirmados. Usa GENERAR para crear el borrador."
+            ? "Datos confirmados. Usa GENERAR para revisar el resumen antes de crear el borrador."
             : "Datos confirmados. Continúa proporcionando los datos pendientes.",
             "CONFIRM_INTERPRETATION");
       } catch (IllegalStateException exception) {
@@ -160,14 +164,11 @@ public class ConversationEngineService implements ConversationEngineUseCase {
     }
     if (command instanceof ConversationCommandParser.GenerateCommand) {
       try {
-        context.ensureReadyToCreate();
-        var request = new CreateInvoiceDraftRequest(companyId, context.documentType(),
-            context.recipientDocumentType(), context.recipientDocumentNumber(), context.currency(),
-            context.items().stream().map(this::toRequest).toList());
-        var draft = invoiceDraftUseCase.create(request);
-        ConversationContext updated = context.markDraftCreated(draft.id(), now);
-        return result(updated, "Borrador creado: " + draft.id()
-            + ". Revísalo y apruébalo antes de emitir.", "GENERATE");
+        ConversationContext awaiting = context.state()
+            == ConversationFlowState.AWAITING_DRAFT_CONFIRMATION
+            ? context : context.requestDraftConfirmation(now);
+        return result(awaiting, draftConfirmationSummary(awaiting),
+            "REQUEST_DRAFT_CONFIRMATION");
       } catch (IllegalStateException exception) {
         return result(context, exception.getMessage(), "GENERATE_REJECTED");
       }
@@ -176,6 +177,22 @@ public class ConversationEngineService implements ConversationEngineUseCase {
       return result(context.reset(now), "Flujo conversacional reiniciado.", "RESET");
     }
     return result(context, "No entendí el comando. " + HELP, "UNKNOWN");
+  }
+
+  private ProcessingResult createConfirmedDraft(
+      String companyId, ConversationContext context, Instant now) {
+    try {
+      context.ensureAwaitingDraftConfirmation();
+      var request = new CreateInvoiceDraftRequest(companyId, context.documentType(),
+          context.recipientDocumentType(), context.recipientDocumentNumber(), context.currency(),
+          context.items().stream().map(this::toRequest).toList());
+      var draft = invoiceDraftUseCase.create(request);
+      ConversationContext updated = context.markDraftCreated(draft.id(), now);
+      return result(updated, "Borrador creado: " + draft.id()
+          + ". Revísalo y apruébalo antes de emitir.", "CONFIRM_DRAFT_CREATION");
+    } catch (IllegalStateException exception) {
+      return result(context, exception.getMessage(), "CONFIRM_DRAFT_REJECTED");
+    }
   }
 
   private ProcessingResult executeNatural(
@@ -599,9 +616,35 @@ public class ConversationEngineService implements ConversationEngineUseCase {
         .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
+  private String draftConfirmationSummary(ConversationContext context) {
+    String currency = currencySymbol(context.currency());
+    StringBuilder summary = new StringBuilder("Detecté:\n- ")
+        .append(context.documentType() == InvoiceDocumentType.SALES_RECEIPT
+            ? "Boleta" : "Factura")
+        .append(" para ").append(context.recipientDocumentType()).append(" ")
+        .append(context.recipientDocumentNumber());
+    context.items().forEach(item -> summary.append("\n- ")
+        .append(item.quantity().stripTrailingZeros().toPlainString()).append(" ")
+        .append(item.description()).append(" × ").append(currency).append(" ")
+        .append(item.unitPrice().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()));
+    return summary.append("\n- Total calculado: ").append(currency).append(" ")
+        .append(calculateTotal(context).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString())
+        .append("\n\n¿Confirmas la creación del borrador? Responde CONFIRMAR o envía una corrección.")
+        .toString();
+  }
+
+  private String currencySymbol(String currency) {
+    return switch (currency) {
+      case "PEN" -> "S/";
+      case "USD" -> "$";
+      default -> currency;
+    };
+  }
+
   private String readyInstruction(ConversationContext context) {
     return context.state() == ConversationFlowState.READY_TO_CREATE
-        ? "Usa RESUMEN o GENERAR." : "Continúa proporcionando los datos faltantes.";
+        ? "Usa GENERAR para revisar el resumen antes de confirmar."
+        : "Continúa proporcionando los datos faltantes.";
   }
 
   private CreateInvoiceItemRequest toRequest(ConversationDraftItem item) {

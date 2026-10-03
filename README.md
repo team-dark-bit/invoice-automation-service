@@ -1,6 +1,6 @@
 # Invoice Automation Service
 
-Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST o desde un motor conversacional independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, recepción segura de imágenes, observabilidad y pruebas con PostgreSQL real.
+Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST, una web conversacional incluida o un motor independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, recepción segura de imágenes, observabilidad y pruebas con PostgreSQL real.
 
 La emisión utiliza actualmente `MockBillingProvider`. La integración HTTP con NUBEFACT, el webhook de WhatsApp, la consulta real de DNI/RUC y OCR/IA todavía son adaptadores pendientes; el dominio y sus puertos ya están preparados para incorporarlos sin trasladar lógica de negocio a los controladores.
 
@@ -49,6 +49,7 @@ clave:   password
 ```
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Web conversacional: `http://localhost:8080/`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 - Salud: `http://localhost:8080/actuator/health`
 
@@ -353,6 +354,18 @@ Solo un mensaje posterior `CONFIRMAR` crea el borrador y avanza a `DRAFT_CREATED
 
 La interpretación de IA es únicamente una fuente de datos candidatos. Su afectación tributaria se ignora al incorporar productos y se aplica la política predeterminada del dominio. El motor tampoco reserva series o correlativos, aprueba, emite ni modifica comprobantes emitidos. Esas acciones permanecen en sus casos de uso y reglas de dominio independientes. `V26__add_draft_confirmation_state.sql` incorpora el nuevo estado persistido y sus restricciones.
 
+### Web conversacional mínima
+
+Spring Boot sirve una interfaz responsive desde `src/main/resources/static` en `http://localhost:8080/`. No requiere Node, npm ni un servidor adicional: `index.html`, `app.js` y `styles.css` se empaquetan dentro del mismo artefacto ejecutable. La portada y sus assets son públicos para permitir el login; todas las operaciones y datos continúan protegidos por JWT.
+
+La web permite iniciar sesión, seleccionar una empresa asociada al usuario y crear una conversación REST. El chat utiliza el mismo `ConversationEngineUseCase` que utilizará WhatsApp, por lo que admite texto natural, comandos deterministas, correcciones, `GENERAR` y `CONFIRMAR`. El panel lateral representa por separado valores detectados y confirmados, confianza, campos faltantes, ambigüedades, errores de cálculo y el estado `AWAITING_DRAFT_CONFIRMATION`.
+
+Las imágenes JPEG, PNG y WebP se previsualizan localmente antes de enviarse. Tras la carga, la interfaz consulta su estado hasta alcanzar `EXTRACTED` o `FAILED` y muestra un indicador durante `RECEIVED` y `PROCESSING`; las validaciones reales de firma, tamaño, dimensiones y duplicados siguen ejecutándose exclusivamente en el backend.
+
+Cuando la confirmación crea un borrador, la interfaz consulta sus ítems y totales. Desde allí permite aprobarlo y, únicamente después, emitirlo mediante el `BillingProvider` configurado. En desarrollo `BILLING_PROVIDER=mock` valida el recorrido completo sin contactar un proveedor real. La web nunca calcula impuestos definitivos, reserva correlativos ni altera estados directamente: solo invoca los casos de uso existentes y representa sus respuestas.
+
+El token se conserva en `sessionStorage`, por lo que se elimina al cerrar la sesión o la pestaña. La empresa, conversación y borrador activos también se guardan solo durante esa sesión para permitir una recarga de la página. Para probar el flujo, la empresa elegida debe tener onboarding tributario y series configuradas, igual que al usar Postman.
+
 ### Recepción y almacenamiento de imágenes
 
 `POST /api/v1/conversations/{id}/images` recibe `multipart/form-data`. La parte obligatoria `file` admite JPEG, PNG y WebP; opcionalmente acepta `externalMessageId`, `retentionPolicy=TEMPORARY|PERMANENT` y `retentionDays`. Una carga nueva responde `201`; si el mismo contenido ya existe activo en la conversación, devuelve el recurso existente con `200` y `duplicate=true`, sin crear otro mensaje ni otro archivo.
@@ -594,5 +607,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 20. Datos detectados y confirmados, confianza, ambigüedades, errores de cálculo y revisión.
 21. Correcciones conversacionales del contexto pendiente y de borradores editables.
 22. Resumen y confirmación explícita antes de crear un borrador conversacional.
+23. Web conversacional mínima servida por Spring Boot para validar texto, imágenes y emisión mock.
 
 Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

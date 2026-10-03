@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Validación conversacional de comprobantes electrónicos">
+  <title>Factura Conversacional</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <main class="app-shell">
+    <section id="login-view" class="login-layout">
+      <div class="brand-panel">
+        <span class="eyebrow">Invoice automation</span>
+        <h1>Convierte una conversación en un borrador listo para revisar.</h1>
+        <p>Prueba texto e imágenes de extremo a extremo antes de conectar WhatsApp.</p>
+        <div class="flow-preview" aria-label="Flujo de trabajo">
+          <span>Conversar</span><i></i><span>Revisar</span><i></i><span>Confirmar</span>
+        </div>
+      </div>
+
+      <form id="login-form" class="card login-card">
+        <div>
+          <span class="eyebrow">Acceso seguro</span>
+          <h2>Inicia sesión</h2>
+          <p class="muted">Usa las mismas credenciales del API.</p>
+        </div>
+        <label>Usuario
+          <input id="username" name="username" autocomplete="username" required autofocus>
+        </label>
+        <label>Contraseña
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="button primary" type="submit">Ingresar</button>
+        <p id="login-error" class="form-error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="workspace-view" class="workspace hidden">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand-mark">F</div>
+          <div><strong>Factura Conversacional</strong><small>Entorno de validación</small></div>
+        </div>
+        <div class="session-controls">
+          <label class="company-picker">Empresa
+            <select id="company-select" aria-label="Empresa activa"></select>
+          </label>
+          <button id="new-conversation" class="button secondary" type="button">Nueva conversación</button>
+          <button id="logout" class="icon-button" type="button" title="Cerrar sesión" aria-label="Cerrar sesión">↗</button>
+        </div>
+      </header>
+
+      <div class="workspace-grid">
+        <section class="chat-card card">
+          <div class="chat-header">
+            <div>
+              <span class="status-dot"></span>
+              <strong id="conversation-title">Sin conversación activa</strong>
+            </div>
+            <span id="flow-state" class="state-pill">EMPTY</span>
+          </div>
+
+          <div id="empty-chat" class="empty-chat">
+            <div class="empty-icon">✦</div>
+            <h2>Empieza una prueba</h2>
+            <p>Crea una conversación y describe la boleta o factura que necesitas.</p>
+            <button id="empty-new-conversation" class="button primary" type="button">Crear conversación</button>
+          </div>
+
+          <div id="messages" class="messages hidden" aria-live="polite"></div>
+
+          <div id="processing-banner" class="processing-banner hidden" role="status">
+            <span class="spinner"></span>
+            <div><strong>Procesando imagen</strong><small>La interpretación se actualizará automáticamente.</small></div>
+          </div>
+
+          <form id="composer" class="composer hidden">
+            <div id="image-preview" class="image-preview hidden"></div>
+            <div class="composer-row">
+              <label class="attach-button" title="Adjuntar imagen">
+                <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp">
+                <span aria-hidden="true">＋</span><span class="sr-only">Adjuntar imagen</span>
+              </label>
+              <textarea id="message-input" rows="1" maxlength="4000" placeholder="Ej.: Quiero una boleta para DNI 12345678"></textarea>
+              <button id="send-message" class="send-button" type="submit" aria-label="Enviar mensaje">➜</button>
+            </div>
+            <div class="composer-hints">
+              <span>Enter para enviar · Shift + Enter para una nueva línea</span>
+              <button id="quick-summary" type="button">GENERAR resumen</button>
+              <button id="quick-confirm" type="button">CONFIRMAR</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="side-panel">
+          <section class="card summary-card">
+            <div class="section-heading">
+              <div><span class="eyebrow">Contexto</span><h2>Resumen detectado</h2></div>
+              <span id="confidence-badge" class="confidence hidden"></span>
+            </div>
+            <div id="summary-empty" class="summary-empty">La información confirmada aparecerá aquí mientras conversas.</div>
+            <div id="summary-content" class="hidden">
+              <dl id="summary-fields" class="summary-fields"></dl>
+              <div id="review-alerts" class="review-alerts"></div>
+            </div>
+          </section>
+
+          <section class="card draft-card">
+            <div class="section-heading">
+              <div><span class="eyebrow">Documento</span><h2>Borrador</h2></div>
+              <button id="refresh-draft" class="text-button hidden" type="button">Actualizar</button>
+            </div>
+            <div id="draft-empty" class="summary-empty">Confirma el resumen para crear un borrador.</div>
+            <div id="draft-content" class="hidden">
+              <div class="draft-meta"><strong id="draft-number">Borrador</strong><span id="draft-status" class="state-pill"></span></div>
+              <div id="draft-recipient" class="draft-recipient"></div>
+              <div id="draft-items" class="draft-items"></div>
+              <div class="draft-total"><span>Total</span><strong id="draft-total"></strong></div>
+              <div class="draft-actions">
+                <button id="approve-draft" class="button secondary" type="button">Aprobar</button>
+                <button id="issue-draft" class="button primary" type="button">Emitir con mock</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="issued-card" class="card issued-card hidden">
+            <span class="success-icon">✓</span>
+            <div><span class="eyebrow">Emisión completada</span><h2 id="issued-number"></h2><p id="issued-detail" class="muted"></p></div>
+          </section>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-region" class="toast-region" aria-live="assertive"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

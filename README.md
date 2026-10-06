@@ -39,7 +39,7 @@ docker compose up -d postgres
 .\mvnw.cmd spring-boot:run
 ```
 
-La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER`, `AI_PROVIDER`, `AI_MODEL`, `AI_REVIEW_THRESHOLD` y las variables `IMAGE_*` descritas en la sección de imágenes.
+La aplicación queda disponible en `http://localhost:8080`. La configuración local usa los valores de `docker-compose.yml`; pueden sobrescribirse con `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_MS`, `BILLING_PROVIDER`, `RECIPIENT_LOOKUP_PROVIDER`, `AI_PROVIDER`, `AI_MODEL`, `ANTHROPIC_API_KEY`, `AI_REVIEW_THRESHOLD` y las variables `IMAGE_*` descritas en la sección de imágenes.
 
 Credenciales sembradas exclusivamente para desarrollo:
 
@@ -390,7 +390,7 @@ El resultado neutral contiene intención, tipo de comprobante, receptor, moneda,
 
 La respuesta del motor incluye `context.review`, separando `detectedValues` de `confirmedValues`, además de `missingFields`, `ambiguousFields`, `confidence`, `calculationErrors` y `confirmationRequired`. El umbral se configura con `AI_REVIEW_THRESHOLD` y vale `0.80` por defecto. Una interpretación por debajo del umbral no modifica los valores confirmados: queda en `NEEDS_REVIEW` y el backend solicita confirmación. Los campos faltantes o ambiguos no pueden confirmarse hasta ser corregidos.
 
-`AI_PROVIDER` selecciona el adaptador y usa `mock` por defecto. Este adaptador conserva las reglas deterministas para texto, no realiza llamadas externas y, para imágenes, produce una interpretación neutral `UNKNOWN` con revisión manual. `AI_MODEL` identifica el modelo que usará el futuro adaptador remoto y su valor inicial es `gpt-5.4-nano`.
+`AI_PROVIDER` selecciona un adaptador del puerto y usa `mock` por defecto. Este adaptador conserva las reglas deterministas para texto, no realiza llamadas externas y, para imágenes, produce una interpretación neutral `UNKNOWN` con revisión manual. El adaptador `anthropic` usa las mismas reglas locales para texto y envía únicamente las imágenes al Messages API de Anthropic. La respuesta estructurada se traduce al contrato interno; ninguna clase de aplicación o dominio depende del JSON de Anthropic.
 
 ### Procesamiento multimodal asíncrono
 
@@ -404,11 +404,27 @@ Configuración inicial:
 
 ```text
 AI_PROVIDER=mock
-AI_MODEL=gpt-5.4-nano
 AI_REVIEW_THRESHOLD=0.80
 ```
 
-La integración posterior con OpenAI deberá implementar `DocumentUnderstandingProvider`, enviar la imagen mediante la Responses API y seleccionarse con `AI_PROVIDER=openai`, sin cambiar el controlador ni el dominio. La clave deberá llegar por secreto de entorno y nunca persistirse. Antes de activar producción debe verificarse la disponibilidad vigente del modelo configurado.
+Para habilitar Anthropic:
+
+```text
+AI_PROVIDER=anthropic
+AI_MODEL=claude-sonnet-5-5
+ANTHROPIC_API_KEY=<secret>
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+AI_MAX_TOKENS=2048
+AI_CONNECT_TIMEOUT=10s
+AI_READ_TIMEOUT=90s
+AI_REVIEW_THRESHOLD=0.80
+```
+
+La clave solo se obtiene del entorno y la aplicación falla al arrancar si se selecciona `anthropic` sin configurarla. No debe enviarse al frontend, guardarse en PostgreSQL ni versionarse. `.env.example` documenta los nombres sin contener credenciales reales; Spring Boot no carga ese archivo automáticamente, por lo que las variables deben definirse en la terminal, IDE, contenedor o gestor de secretos.
+
+Anthropic recibe la imagen en base64 y un resumen del contexto confirmado de la conversación. Su límite de 10 MB se aplica al contenido ya codificado, por lo que una imagen cercana al máximo local de 10 MB puede requerir compresión o reducción antes de enviarse. Los errores HTTP, timeouts y respuestas inválidas dejan el procesamiento en `FAILED` mediante el flujo asíncrono existente y pueden reintentarse con el endpoint de procesamiento.
+
+Para migrar a otra IA se implementa otro adaptador de `DocumentUnderstandingProvider` y se selecciona con `AI_PROVIDER`; controladores, casos de uso, conversaciones y dominio no cambian. Por ejemplo, un futuro `OpenAiDocumentUnderstandingProvider` traduciría su respuesta al mismo `DocumentInterpretation`. El proveedor externo solo detecta datos candidatos: nunca decide impuestos, reserva correlativos, aprueba ni emite comprobantes.
 
 ### Pruebas de integración y concurrencia
 
@@ -442,7 +458,6 @@ JWT_EXPIRATION_MS=3600000
 BILLING_PROVIDER=mock
 RECIPIENT_LOOKUP_PROVIDER=mock
 AI_PROVIDER=mock
-AI_MODEL=gpt-5.4-nano
 AI_REVIEW_THRESHOLD=0.80
 ```
 

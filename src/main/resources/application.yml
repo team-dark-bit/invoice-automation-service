@@ -50,7 +50,12 @@ recipient:
   lookup-provider: ${RECIPIENT_LOOKUP_PROVIDER:mock}
 ai:
   provider: ${AI_PROVIDER:mock}
-  model: ${AI_MODEL:gpt-5.4-nano}
+  model: ${AI_MODEL:claude-sonnet-5-5}
+  api-key: ${ANTHROPIC_API_KEY:}
+  base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
+  max-tokens: ${AI_MAX_TOKENS:2048}
+  connect-timeout: ${AI_CONNECT_TIMEOUT:10s}
+  read-timeout: ${AI_READ_TIMEOUT:90s}
   review-threshold: ${AI_REVIEW_THRESHOLD:0.80}
 image-storage:
   provider: ${IMAGE_STORAGE_PROVIDER:local}

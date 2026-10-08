@@ -10,6 +10,8 @@ import com.invoiceautomationservice.application.service.mapper.CompanyDomainResp
 import com.invoiceautomationservice.application.service.mapper.CompanyRequestDomainMapper;
 import java.util.List;
 import com.invoiceautomationservice.domain.model.AuditAction;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
+import com.invoiceautomationservice.application.dto.request.UpdateCompanyRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,5 +54,27 @@ public class CompanyService implements CompanyUseCase {
     return companyRepository.search(
         companyAccessService.currentCompanyIds(), query, active, new PageQuery(page, size))
         .map(responseMapper::toResponse);
+  }
+
+  @Override
+  @Transactional
+  public CompanyResponse update(String companyId, UpdateCompanyRequest request) {
+    companyAccessService.requireAccess(companyId);
+    companyAccessService.requirePermission(companyId, CompanyPermission.ONBOARDING_MANAGE);
+    var company = companyRepository.findById(companyId);
+    if (request.legalName() != null) company.setLegalName(request.legalName().strip());
+    if (request.tradeName() != null) company.setTradeName(nullableText(request.tradeName()));
+    if (request.taxId() != null) company.setTaxId(request.taxId());
+    if (request.address() != null) company.setAddress(nullableText(request.address()));
+    if (request.active() != null) company.setActive(request.active());
+    var saved = companyRepository.save(company);
+    auditTrailService.record(companyId, AuditAction.COMPANY_UPDATED, "COMPANY", companyId,
+        "SUCCESS", "Company settings updated");
+    return responseMapper.toResponse(saved);
+  }
+
+  private String nullableText(String value) {
+    String stripped = value.strip();
+    return stripped.isEmpty() ? null : stripped;
   }
 }

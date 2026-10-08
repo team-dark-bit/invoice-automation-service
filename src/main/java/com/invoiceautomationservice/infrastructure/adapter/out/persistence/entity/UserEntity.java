@@ -1,6 +1,7 @@
 package com.invoiceautomationservice.infrastructure.adapter.out.persistence.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Column;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -28,6 +29,9 @@ public class UserEntity {
   private boolean enabled;
   private LocalDateTime createdAt;
   private LocalDateTime lastLogin;
+
+  @Column(name = "default_company_id")
+  private String defaultCompanyId;
 
   // campos para un futuro control de seguridad, aunque por ahora no los usaremos:
   // private boolean accountNonExpired = true;

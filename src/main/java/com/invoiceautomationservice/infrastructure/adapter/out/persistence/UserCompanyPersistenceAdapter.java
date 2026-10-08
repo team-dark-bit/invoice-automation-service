@@ -9,6 +9,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import com.invoiceautomationservice.domain.model.CompanyRole;
 import java.util.Optional;
+import com.invoiceautomationservice.domain.model.UserCompanyAccess;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -46,6 +47,15 @@ public class UserCompanyPersistenceAdapter implements UserCompanyRepository {
     return userCompanyRepository.findByUserIdAndCompanyId(findUserId(username), companyId)
         .filter(UserCompanyEntity::isActive)
         .map(UserCompanyEntity::getRole);
+  }
+
+  @Override
+  public List<UserCompanyAccess> findAccesses(String username) {
+    return userCompanyRepository.findAllByUserIdAndActiveTrueOrderByCreatedAtAsc(
+        findUserId(username)).stream()
+        .map(membership -> new UserCompanyAccess(
+            membership.getCompanyId(), membership.getRole()))
+        .toList();
   }
 
   private String findUserId(String username) {

@@ -5,6 +5,7 @@ import static com.invoiceautomationservice.infrastructure.config.exception.Runti
 
 import com.invoiceautomationservice.application.port.out.CurrentUserProvider;
 import com.invoiceautomationservice.application.port.out.UserCompanyRepository;
+import com.invoiceautomationservice.application.port.out.UserAccountRepository;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
 import com.invoiceautomationservice.domain.model.CompanyPermission;
@@ -18,6 +19,7 @@ public class CompanyAccessService {
 
   private final CurrentUserProvider currentUserProvider;
   private final UserCompanyRepository userCompanyRepository;
+  private final UserAccountRepository userAccountRepository;
 
   public void associateCurrentUser(String companyId) {
     userCompanyRepository.associate(currentUserProvider.username(), companyId);
@@ -55,6 +57,11 @@ public class CompanyAccessService {
     List<String> companyIds = currentCompanyIds();
     if (companyIds.size() == 1) {
       return companyIds.getFirst();
+    }
+    String defaultCompanyId = userAccountRepository
+        .findByUsername(currentUserProvider.username()).defaultCompanyId();
+    if (defaultCompanyId != null && companyIds.contains(defaultCompanyId)) {
+      return defaultCompanyId;
     }
     throw new ApplicationException(COMPANY_CONTEXT_REQUIRED);
   }

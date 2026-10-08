@@ -30,10 +30,19 @@ class ProductionConfigurationValidatorTest {
         validProductionEnvironment()).afterPropertiesSet()).doesNotThrowAnyException();
   }
 
+  @Test
+  void rejectsWildcardCorsInProduction() {
+    var environment = validProductionEnvironment()
+        .withProperty("app.cors.allowed-origins", "*");
+    assertThatThrownBy(() -> new ProductionConfigurationValidator(environment).afterPropertiesSet())
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("APP_CORS_ALLOWED_ORIGINS");
+  }
+
   private MockEnvironment validProductionEnvironment() {
     return new MockEnvironment().withProperty("spring.profiles.active", "prod")
         .withProperty("jwt.secret", "a-production-secret-with-more-than-32-characters")
         .withProperty("spring.datasource.password", "strong-db-password")
-        .withProperty("billing.provider", "nubefact");
+        .withProperty("billing.provider", "nubefact")
+        .withProperty("app.cors.allowed-origins", "https://app.example.com");
   }
 }

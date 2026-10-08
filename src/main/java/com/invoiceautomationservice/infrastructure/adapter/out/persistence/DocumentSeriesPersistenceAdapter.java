@@ -10,6 +10,7 @@ import com.invoiceautomationservice.infrastructure.adapter.out.persistence.entit
 import com.invoiceautomationservice.infrastructure.adapter.out.persistence.repository.JpaDocumentSeriesRepository;
 import com.invoiceautomationservice.infrastructure.config.exception.ApplicationException;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
@@ -21,13 +22,31 @@ public class DocumentSeriesPersistenceAdapter implements DocumentSeriesRepositor
 
   @Override
   public DocumentSeries save(DocumentSeries series) {
-    return toDomain(repository.save(toEntity(series)));
+    DocumentSeriesEntity entity = repository.findById(series.id())
+        .orElseGet(DocumentSeriesEntity::new);
+    entity.setId(series.id());
+    entity.setCompanyId(series.companyId());
+    entity.setDocumentType(series.documentType());
+    entity.setSeries(series.series());
+    entity.setCurrentCorrelative(series.currentCorrelative());
+    entity.setActive(series.active());
+    return toDomain(repository.save(entity));
   }
 
   @Override
   public List<DocumentSeries> findAllByCompanyId(String companyId) {
     return repository.findAllByCompanyIdOrderBySeries(companyId).stream()
         .map(this::toDomain).toList();
+  }
+
+  @Override
+  public Optional<DocumentSeries> findById(String id) {
+    return repository.findById(id).map(this::toDomain);
+  }
+
+  @Override
+  public void deleteById(String id) {
+    repository.deleteById(id);
   }
 
   @Override
@@ -55,19 +74,6 @@ public class DocumentSeriesPersistenceAdapter implements DocumentSeriesRepositor
     entity.setCurrentCorrelative(next);
     repository.save(entity);
     return new DocumentNumber(entity.getSeries(), next);
-  }
-
-  private DocumentSeriesEntity toEntity(DocumentSeries series) {
-    DocumentSeriesEntity entity = new DocumentSeriesEntity();
-    entity.setId(series.id());
-    entity.setCompanyId(series.companyId());
-    entity.setDocumentType(series.documentType());
-    entity.setSeries(series.series());
-    entity.setCurrentCorrelative(series.currentCorrelative());
-    entity.setActive(series.active());
-    // A null version tells Hibernate that this UUID-backed entity is new.
-    entity.setVersion(null);
-    return entity;
   }
 
   private DocumentSeries toDomain(DocumentSeriesEntity entity) {

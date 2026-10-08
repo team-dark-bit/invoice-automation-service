@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.invoiceautomationservice.application.dto.request.TenantOnboardingRequest;
 import com.invoiceautomationservice.application.port.out.CompanyMemberRepository;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
+import com.invoiceautomationservice.application.port.out.UserAccountRepository;
 import com.invoiceautomationservice.domain.model.CompanyMember;
 import com.invoiceautomationservice.domain.model.CompanyRole;
 import java.time.Clock;
@@ -24,9 +25,10 @@ class TenantOnboardingServiceTest {
     CompanyMemberRepository members = mock(CompanyMemberRepository.class);
     PasswordEncoder encoder = mock(PasswordEncoder.class);
     AuditTrailService audit = mock(AuditTrailService.class);
+    UserAccountRepository userAccounts = mock(UserAccountRepository.class);
     Clock clock = Clock.fixed(Instant.parse("2026-09-23T15:00:00Z"), ZoneOffset.UTC);
     TenantOnboardingService service = new TenantOnboardingService(
-        companies, members, encoder, audit, clock);
+        companies, members, encoder, audit, userAccounts, clock);
     var request = new TenantOnboardingRequest("Owner", "owner", "OWNER@example.com",
         "secret123", new TenantOnboardingRequest.Company(
             "Company SAC", "Company", "20123456789", "Lima"));
@@ -44,5 +46,6 @@ class TenantOnboardingServiceTest {
     verify(members).create(response.company().getId(), "Owner", "owner",
         "owner@example.com", "hash", CompanyRole.OWNER,
         Instant.parse("2026-09-23T15:00:00Z"));
+    verify(userAccounts).updateDefaultCompany("owner", response.company().getId());
   }
 }

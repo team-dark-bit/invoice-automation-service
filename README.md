@@ -2,7 +2,7 @@
 
 Backend multiempresa para crear, revisar, aprobar y emitir comprobantes electrónicos desde una API REST, una web conversacional incluida o un motor independiente del canal. El proyecto ya cubre el núcleo tributario previo a las integraciones externas: usuarios y permisos por empresa, onboarding del emisor, resolución del receptor, borradores, cálculo de IGV, numeración concurrente, comprobantes inmutables, notas, auditoría, conversaciones, recepción segura de imágenes, observabilidad y pruebas con PostgreSQL real.
 
-La emisión utiliza actualmente `MockBillingProvider`. La integración HTTP con NUBEFACT, el webhook de WhatsApp, la consulta real de DNI/RUC y OCR/IA todavía son adaptadores pendientes; el dominio y sus puertos ya están preparados para incorporarlos sin trasladar lógica de negocio a los controladores.
+La emisión utiliza actualmente `MockBillingProvider`. La integración HTTP con el proveedor tributario, el webhook de WhatsApp y la consulta real de DNI/RUC todavía son adaptadores pendientes. El procesamiento multimodal ya dispone de adaptadores `mock` y Anthropic intercambiables; el dominio y sus puertos mantienen las integraciones externas fuera de la lógica de negocio.
 
 ## Arquitectura y estructura
 
@@ -95,13 +95,13 @@ Salvo login, onboarding y endpoints públicos de Actuator, todas las solicitudes
 Authorization: Bearer <JWT>
 ```
 
-Cuando el usuario pertenece a más de una empresa, los endpoints que no incluyen la empresa en la ruta requieren:
+Los endpoints que no incluyen la empresa en la ruta aceptan opcionalmente:
 
 ```http
 X-Company-Id: <companyId>
 ```
 
-Si solo existe una empresa accesible, el backend puede resolverla automáticamente. Todas las respuestas funcionales usan el contenedor `ApiResponse`; los listados paginados agregan `content`, `page`, `size`, `totalElements`, `totalPages`, `first` y `last`. `page` comienza en cero y `size` admite de 1 a 100. Los errores más habituales son `400` por datos inválidos, `401` por token ausente o inválido, `403` por permisos, `404` por recurso inexistente o no visible para el tenant y `409` por transición de estado o concurrencia inválida.
+Si no se envía, el backend usa la única empresa accesible o la empresa predeterminada del usuario. La preferencia se modifica con `PATCH /api/auth/me/default-company`. Todas las respuestas funcionales usan el contenedor `ApiResponse`; los listados paginados agregan `content`, `page`, `size`, `totalElements`, `totalPages`, `first` y `last`. `page` comienza en cero y `size` admite de 1 a 100. Los errores más habituales son `400` por datos inválidos, `401` por token ausente o inválido, `403` por permisos, `404` por recurso inexistente o no visible para el tenant y `409` por transición de estado o concurrencia inválida.
 
 Cada respuesta devuelve `X-Correlation-Id`, que permite relacionar la operación con sus logs.
 
@@ -109,13 +109,13 @@ Cada respuesta devuelve `X-Correlation-Id`, que permite relacionar la operación
 
 | Área | Operaciones |
 | --- | --- |
-| Autenticación | `POST /api/auth/login`, `GET /api/auth/me` |
+| Autenticación | `POST /api/auth/login`, `GET /api/auth/me`, `PATCH /api/auth/me/default-company` |
 | Onboarding | `POST /api/v1/onboarding` |
-| Empresas | `POST/GET /api/v1/companies`, `GET /api/v1/companies/{id}`, `GET /api/v1/companies/search` |
-| Perfil tributario | `POST/GET /api/v1/companies/{id}/tax-profile` |
-| Series | `POST/GET /api/v1/companies/{id}/document-series` |
+| Empresas | `POST/GET /api/v1/companies`, `GET/PATCH /api/v1/companies/{id}`, `GET /api/v1/companies/search`, `GET .../{id}/onboarding-status` |
+| Perfil tributario | `POST/GET/PUT /api/v1/companies/{id}/tax-profile` |
+| Series | `POST/GET /api/v1/companies/{id}/document-series`, `PATCH/DELETE .../document-series/{seriesId}` |
 | Miembros | `POST/GET /api/v1/companies/{id}/members`, `POST .../members/existing`, `PATCH/DELETE .../members/{userId}` |
-| Clientes | `POST/GET /customers`, `GET /customers/{id}`, `GET /customers/search` |
+| Clientes | `POST/GET /api/v1/customers`, `GET /api/v1/customers/{id}`, `GET /api/v1/customers/search` |
 | Receptores | `POST /api/v1/recipients/resolve` |
 | Borradores | `POST/GET /api/v1/invoice-drafts`, `GET/PUT /api/v1/invoice-drafts/{id}`, `POST .../{id}/approve`, `.../cancel`, `.../issue` |
 | Comprobantes | `GET /api/v1/electronic-documents`, `GET .../{id}`, `POST .../{id}/refresh-status`, `.../retry` |
@@ -146,6 +146,20 @@ Para ejecución por CLI, si dispone de Newman:
 newman run docs/postman/invoice-automation-service.postman_collection.json \
   -e docs/postman/local.postman_environment.json
 ```
+
+## Contrato preparado para un frontend independiente
+
+El backend expone el flujo administrativo necesario para construir un frontend separado sin depender todavía de WhatsApp ni del proveedor tributario real:
+
+1. `POST /api/v1/onboarding` registra de forma atómica al propietario y su primera empresa.
+2. `POST /api/auth/login` autentica y `GET /api/auth/me` devuelve identidad, empresas accesibles, rol, permisos y empresa predeterminada.
+3. `PATCH /api/auth/me/default-company` persiste la empresa que deben usar los flujos sin `X-Company-Id` explícito.
+4. `PATCH /api/v1/companies/{id}` permite corregir los datos generales del emisor.
+5. `POST` o `PUT /api/v1/companies/{id}/tax-profile` crea o actualiza el perfil tributario.
+6. Las series pueden crearse, consultarse, editarse, activarse o desactivarse. Una serie que ya consumió correlativos no puede renombrarse ni eliminarse; debe desactivarse para preservar la trazabilidad.
+7. `GET /api/v1/companies/{id}/onboarding-status` resume los pasos completados y pendientes. El onboarding queda listo cuando existe perfil tributario y al menos una serie primaria activa de factura o boleta.
+
+El origen del frontend se controla mediante `APP_CORS_ALLOWED_ORIGINS`. En desarrollo el valor predeterminado es `http://localhost:5173`; varios orígenes se separan por coma. Producción exige definirlo explícitamente y rechaza comodines. La ruta histórica `/customers` se conserva temporalmente por compatibilidad, pero los nuevos consumidores deben usar `/api/v1/customers`.
 
 ## Aislamiento multiempresa
 
@@ -626,5 +640,6 @@ La preparación previa al proveedor real quedó cerrada con los siguientes punto
 21. Correcciones conversacionales del contexto pendiente y de borradores editables.
 22. Resumen y confirmación explícita antes de crear un borrador conversacional.
 23. Web conversacional mínima servida por Spring Boot para validar texto, imágenes y emisión mock.
+24. Preparación para frontend independiente: sesión enriquecida, empresa predeterminada, estado consolidado del onboarding, mantenimiento de empresa/perfil/series, CORS parametrizable y rutas REST versionadas.
 
-Los siguientes trabajos corresponden a los adaptadores y flujos que usan este núcleo: adaptador OpenAI real; web mínima; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.
+Los siguientes trabajos corresponden a consumidores y adaptadores externos de este núcleo: frontend administrativo independiente; proveedor tributario; proveedor de consulta DNI/RUC; webhook y descarga segura de medios de WhatsApp; proveedores multimodales adicionales; y pruebas de contrato contra los sandboxes externos. Ningún token de esos proveedores debe guardarse en Git ni incluirse en snapshots, logs o respuestas de auditoría.

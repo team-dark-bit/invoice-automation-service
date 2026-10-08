@@ -23,7 +23,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
 @RestController
-@RequestMapping("/customers")
+@RequestMapping({"/api/v1/customers", "/customers"})
 @Validated
 @RequiredArgsConstructor
 public class CustomerController {
@@ -38,7 +38,8 @@ public class CustomerController {
           CreateCustomerRequest createCustomerRequest
   ) {
     customerUseCase.create(createCustomerRequest, companyId);
-    return ResponseEntity.ok(ApiResponse.success(HttpStatus.CREATED.value(), "Customer created successfully", null));
+    return ResponseEntity.status(HttpStatus.CREATED).body(
+        ApiResponse.success(HttpStatus.CREATED.value(), "Customer created successfully", null));
   }
 
   @GetMapping("/{id}")

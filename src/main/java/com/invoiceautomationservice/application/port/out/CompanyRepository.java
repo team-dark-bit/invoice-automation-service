@@ -9,5 +9,6 @@ public interface CompanyRepository {
   Company save(Company company);
   Company findById(String id);
   List<Company> findAllByIdInAndActiveTrue(List<String> ids);
+  List<Company> findAllByIdIn(List<String> ids);
   PageResult<Company> search(List<String> ids, String query, Boolean active, PageQuery page);
 }

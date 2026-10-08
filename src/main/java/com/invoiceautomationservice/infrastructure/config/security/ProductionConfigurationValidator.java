@@ -30,6 +30,10 @@ public class ProductionConfigurationValidator implements InitializingBean {
           "DB_PASSWORD must be a non-default value with at least 12 characters in prod");
     }
     required("billing.provider");
+    String allowedOrigins = required("app.cors.allowed-origins");
+    if (allowedOrigins.contains("*")) {
+      throw new IllegalStateException("APP_CORS_ALLOWED_ORIGINS must not contain wildcards in prod");
+    }
   }
 
   private String required(String property) {

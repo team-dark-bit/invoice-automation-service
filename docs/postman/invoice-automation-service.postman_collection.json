@@ -14,7 +14,9 @@
     { "key": "onboardingEmail", "value": "", "type": "string" },
     { "key": "onboardingTaxId", "value": "", "type": "string" },
     { "key": "memberUsername", "value": "", "type": "string" },
-    { "key": "memberEmail", "value": "", "type": "string" }
+    { "key": "memberEmail", "value": "", "type": "string" },
+    { "key": "seriesId", "value": "", "type": "string" },
+    { "key": "removableSeriesId", "value": "", "type": "string" }
   ],
   "auth": {
     "type": "bearer",
@@ -273,6 +275,51 @@
           }
         },
         {
+          "name": "Set default company",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me/default-company",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me", "default-company"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {"type": "text/javascript", "exec": [
+              "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+              "pm.test('Default company updated', () => pm.expect(pm.response.json().data.defaultCompanyId).to.eql(pm.environment.get('companyId')));"
+            ]}
+          }]
+        },
+        {
+          "name": "Update company settings",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tradeName\": \"Postman Test Actualizado\",\n  \"address\": \"Lima, Peru\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}"]
+            }
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+            "pm.test('Company was updated', () => pm.expect(pm.response.json().data.tradeName).to.eql('Postman Test Actualizado'));"
+          ]}}]
+        },
+        {
           "name": "Configure issuer tax profile",
           "request": {
             "method": "POST",
@@ -298,6 +345,27 @@
               ]
             }
           }]
+        },
+        {
+          "name": "Update issuer tax profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"taxpayerType\": \"LEGAL_ENTITY\",\n  \"fiscalAddress\": \"Av. Lima 456\",\n  \"ubigeo\": \"150101\",\n  \"department\": \"Lima\",\n  \"province\": \"Lima\",\n  \"district\": \"Lima\",\n  \"countryCode\": \"PE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/tax-profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "tax-profile"]
+            }
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+            "pm.test('Tax profile updated', () => pm.expect(pm.response.json().data.fiscalAddress).to.eql('Av. Lima 456'));"
+          ]}}]
         },
         {
           "name": "Get issuer tax profile",
@@ -343,7 +411,8 @@
               "type": "text/javascript",
               "exec": [
                 "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
-                "pm.test('Receipt series starts at zero', () => pm.expect(pm.response.json().data.currentCorrelative).to.eql(0));"
+                "pm.test('Receipt series starts at zero', () => pm.expect(pm.response.json().data.currentCorrelative).to.eql(0));",
+                "pm.environment.set('seriesId', pm.response.json().data.id);"
               ]
             }
           }]
@@ -366,6 +435,57 @@
               "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]
             }
           }]
+        },
+        {
+          "name": "Update document series",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {"mode": "raw", "raw": "{\n  \"active\": true\n}", "options": {"raw": {"language": "json"}}},
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/document-series/{{seriesId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "companies", "{{companyId}}", "document-series", "{{seriesId}}"]
+            }
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+            "pm.test('Series remains active', () => pm.expect(pm.response.json().data.active).to.eql(true));"
+          ]}}]
+        },
+        {
+          "name": "Create removable document series",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {"mode": "raw", "raw": "{\n  \"documentType\": \"INVOICE\",\n  \"series\": \"F099\"\n}", "options": {"raw": {"language": "json"}}},
+            "url": {"raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/document-series", "host": ["{{baseUrl}}"], "path": ["api", "v1", "companies", "{{companyId}}", "document-series"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+            "pm.environment.set('removableSeriesId', pm.response.json().data.id);"
+          ]}}]
+        },
+        {
+          "name": "Delete unused document series",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/document-series/{{removableSeriesId}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "companies", "{{companyId}}", "document-series", "{{removableSeriesId}}"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));"]}}]
+        },
+        {
+          "name": "Get onboarding status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/v1/companies/{{companyId}}/onboarding-status", "host": ["{{baseUrl}}"], "path": ["api", "v1", "companies", "{{companyId}}", "onboarding-status"]}
+          },
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+            "pm.test('Onboarding is complete', () => pm.expect(pm.response.json().data.completed).to.eql(true));"
+          ]}}]
         },
         {
           "name": "Find company by ID",
@@ -451,9 +571,9 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{baseUrl}}/customers",
+              "raw": "{{baseUrl}}/api/v1/customers",
               "host": ["{{baseUrl}}"],
-              "path": ["customers"]
+              "path": ["api", "v1", "customers"]
             }
           }
         },
@@ -463,9 +583,9 @@
             "method": "GET",
             "header": [{ "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }],
             "url": {
-              "raw": "{{baseUrl}}/customers",
+              "raw": "{{baseUrl}}/api/v1/customers",
               "host": ["{{baseUrl}}"],
-              "path": ["customers"]
+              "path": ["api", "v1", "customers"]
             }
           },
           "event": [{
@@ -488,9 +608,9 @@
             "method": "GET",
             "header": [{ "key": "X-Company-Id", "value": "{{companyId}}", "type": "text" }],
             "url": {
-              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "raw": "{{baseUrl}}/api/v1/customers/{{customerId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["customers", "{{customerId}}"]
+              "path": ["api", "v1", "customers", "{{customerId}}"]
             }
           },
           "event": [{
@@ -827,7 +947,7 @@
         },
         {
           "name": "Search customers",
-          "request": {"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/customers/search?query={{recipientDocumentNumber}}&active=true&page=0&size=10","host":["{{baseUrl}}"],"path":["customers","search"],"query":[{"key":"query","value":"{{recipientDocumentNumber}}"},{"key":"active","value":"true"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
+          "request": {"method":"GET","header":[{"key":"X-Company-Id","value":"{{companyId}}"}],"url":{"raw":"{{baseUrl}}/api/v1/customers/search?query={{recipientDocumentNumber}}&active=true&page=0&size=10","host":["{{baseUrl}}"],"path":["api","v1","customers","search"],"query":[{"key":"query","value":"{{recipientDocumentNumber}}"},{"key":"active","value":"true"},{"key":"page","value":"0"},{"key":"size","value":"10"}]}},
           "event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('HTTP 200', () => pm.response.to.have.status(200));","pm.test('Returns customer page', () => pm.expect(pm.response.json().data.content).to.be.an('array')); "]}}]
         },
         {

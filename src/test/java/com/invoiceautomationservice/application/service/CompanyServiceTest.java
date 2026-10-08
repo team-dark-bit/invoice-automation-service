@@ -11,6 +11,8 @@ import com.invoiceautomationservice.application.port.out.CompanyRepository;
 import com.invoiceautomationservice.application.service.mapper.CompanyDomainResponseMapper;
 import com.invoiceautomationservice.application.service.mapper.CompanyRequestDomainMapper;
 import com.invoiceautomationservice.domain.model.Company;
+import com.invoiceautomationservice.application.dto.request.UpdateCompanyRequest;
+import com.invoiceautomationservice.domain.model.CompanyPermission;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +75,23 @@ class CompanyServiceTest {
     when(responseMapper.toResponse(second)).thenReturn(secondResponse);
 
     assertThat(service.findAll()).containsExactly(firstResponse, secondResponse);
+  }
+
+  @Test
+  void updatesCompanySettingsWithOnboardingPermission() {
+    Company company = company("company-1", "Old name");
+    CompanyResponse response = response("company-1", "New name");
+    var request = new UpdateCompanyRequest("New name", "New trade", "20987654321",
+        "Cusco", true);
+    when(repository.findById("company-1")).thenReturn(company);
+    when(repository.save(company)).thenReturn(company);
+    when(responseMapper.toResponse(company)).thenReturn(response);
+
+    assertThat(service.update("company-1", request)).isSameAs(response);
+
+    verify(accessService).requirePermission("company-1", CompanyPermission.ONBOARDING_MANAGE);
+    assertThat(company.getLegalName()).isEqualTo("New name");
+    assertThat(company.getTaxId()).isEqualTo("20987654321");
   }
 
   private Company company(String id, String legalName) {

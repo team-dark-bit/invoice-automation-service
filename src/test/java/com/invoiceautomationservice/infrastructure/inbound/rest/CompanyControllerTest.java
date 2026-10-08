@@ -4,14 +4,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.invoiceautomationservice.application.dto.request.CreateCompanyRequest;
 import com.invoiceautomationservice.application.dto.response.CompanyResponse;
+import com.invoiceautomationservice.application.dto.response.OnboardingStatusResponse;
 import com.invoiceautomationservice.application.port.in.CompanyUseCase;
 import com.invoiceautomationservice.application.port.in.IssuerOnboardingUseCase;
 import com.invoiceautomationservice.application.service.DocumentSeriesService;
+import com.invoiceautomationservice.application.service.OnboardingStatusService;
 import com.invoiceautomationservice.infrastructure.adapter.in.web.CompanyController;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,9 @@ class CompanyControllerTest {
 
   @MockitoBean
   DocumentSeriesService documentSeriesService;
+
+  @MockitoBean
+  OnboardingStatusService onboardingStatusService;
 
   @Test
   void createsCompany() throws Exception {
@@ -85,6 +91,33 @@ class CompanyControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.length()").value(1))
             .andExpect(jsonPath("$.data[0].id").value("company-1"));
+  }
+
+  @Test
+  void updatesCompanySettings() throws Exception {
+    CompanyResponse updated = company();
+    updated.setTradeName("Updated");
+    when(useCase.update(org.mockito.ArgumentMatchers.eq("company-1"), any()))
+        .thenReturn(updated);
+
+    mockMvc.perform(patch("/api/v1/companies/company-1")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("""
+                {"tradeName":"Updated"}
+                """))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.tradeName").value("Updated"));
+  }
+
+  @Test
+  void returnsConsolidatedOnboardingStatus() throws Exception {
+    when(onboardingStatusService.get("company-1")).thenReturn(new OnboardingStatusResponse(
+        "company-1", true, true, false, true, true, List.of()));
+
+    mockMvc.perform(get("/api/v1/companies/company-1/onboarding-status"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.completed").value(true))
+        .andExpect(jsonPath("$.data.salesReceiptSeriesConfigured").value(true));
   }
 
   private CompanyResponse company() {

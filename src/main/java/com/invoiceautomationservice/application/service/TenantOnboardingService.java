@@ -6,6 +6,7 @@ import com.invoiceautomationservice.application.dto.response.CompanyResponse;
 import com.invoiceautomationservice.application.dto.response.TenantOnboardingResponse;
 import com.invoiceautomationservice.application.port.out.CompanyMemberRepository;
 import com.invoiceautomationservice.application.port.out.CompanyRepository;
+import com.invoiceautomationservice.application.port.out.UserAccountRepository;
 import com.invoiceautomationservice.domain.model.AuditAction;
 import com.invoiceautomationservice.domain.model.Company;
 import com.invoiceautomationservice.domain.model.CompanyMember;
@@ -27,6 +28,7 @@ public class TenantOnboardingService {
   private final CompanyMemberRepository memberRepository;
   private final PasswordEncoder passwordEncoder;
   private final AuditTrailService auditTrailService;
+  private final UserAccountRepository userAccountRepository;
   private final Clock clock;
 
   @Transactional
@@ -47,6 +49,7 @@ public class TenantOnboardingService {
     CompanyMember owner = memberRepository.create(savedCompany.getId(), request.fullName().strip(),
         username, email, passwordEncoder.encode(request.password()), CompanyRole.OWNER,
         Instant.now(clock));
+    userAccountRepository.updateDefaultCompany(username, savedCompany.getId());
     auditTrailService.recordAs(username, savedCompany.getId(), AuditAction.TENANT_ONBOARDED,
         "COMPANY", savedCompany.getId(), "SUCCESS", "Owner and company registered");
     return new TenantOnboardingResponse(toCompanyResponse(savedCompany), toMemberResponse(owner),

@@ -49,6 +49,10 @@ public class UserPersistenceAdapter implements UserPort {
   @Override
   public void save(UserModel model) {
     UserEntity entity = userMapper.toEntity(model);
+    if (entity.getId() != null) {
+      userRepository.findById(entity.getId()).ifPresent(existing ->
+          entity.setDefaultCompanyId(existing.getDefaultCompanyId()));
+    }
     entity.setRoles(resolveRoles(model.getRoles()));
     userRepository.save(entity);
   }

@@ -44,6 +44,11 @@ public class CompanyPersistenceAdapter implements CompanyRepository {
   }
 
   @Override
+  public List<Company> findAllByIdIn(List<String> ids) {
+    return jpaCompanyRepository.findAllById(ids).stream().map(mapper::toDomain).toList();
+  }
+
+  @Override
   public PageResult<Company> search(
       List<String> ids, String queryText, Boolean active, PageQuery pageQuery) {
     Specification<CompanyEntity> specification = (root, query, cb) -> root.get("id").in(ids);

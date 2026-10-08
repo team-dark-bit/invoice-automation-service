@@ -1277,6 +1277,26 @@
             "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/close", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "close"]}
           },
           "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Natural conversation is closed', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"]}}]
+        },
+        {
+          "name": "Create multi-product conversation",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}, {"key": "X-Company-Id", "value": "{{companyId}}"}], "body": {"mode": "raw", "raw": "{\n  \"customerId\": null,\n  \"invoiceDraftId\": null,\n  \"channel\": \"REST\",\n  \"externalParticipantId\": \"postman-multi-product\"\n}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations"]}, "description": "Inicia un flujo equivalente al que usará WhatsApp para probar onboarding y varios productos por mensaje."},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 201', () => pm.response.to.have.status(201));", "if (pm.response.code === 201) pm.environment.set('conversationId', pm.response.json().data.id);"]}}]
+        },
+        {
+          "name": "Onboarding - Greeting and help",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Hola\",\"externalMessageId\":\"onboarding-greeting-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('New user receives guidance', () => { const data = pm.response.json().data; pm.expect(data.context.state).to.eql('EMPTY'); pm.expect(data.reply).to.include('Quiero una boleta para DNI'); pm.expect(data.reply).to.include('2 gaseosas a 3.50'); });"]}}]
+        },
+        {
+          "name": "Multi-product - Start receipt",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"Quiero una boleta para DNI {{recipientDocumentNumber}}\",\"externalMessageId\":\"multi-start-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Receipt header is ready for products', () => pm.expect(pm.response.json().data.context.state).to.eql('COLLECTING_DATA'));"]}}]
+        },
+        {
+          "name": "Multi-product - Add several in one message",
+          "request": {"method": "POST", "header": [{"key": "Content-Type", "value": "application/json"}], "body": {"mode": "raw", "raw": "{\"text\":\"2 cajas de gaseosa a un precio unitario de 14.80, 2 paquetes de fideos a un precio unitario de 35.42\",\"externalMessageId\":\"multi-items-1\"}", "options": {"raw": {"language": "json"}}}, "url": {"raw": "{{baseUrl}}/api/v1/conversations/{{conversationId}}/process", "host": ["{{baseUrl}}"], "path": ["api", "v1", "conversations", "{{conversationId}}", "process"]}, "description": "Simula un mensaje de WhatsApp con varios productos separados por coma."},
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('HTTP 200', () => pm.response.to.have.status(200));", "pm.test('Two products and backend total were detected', () => { const data = pm.response.json().data; pm.expect(data.context.state).to.eql('READY_TO_CREATE'); pm.expect(data.context.itemCount).to.eql(2); pm.expect(data.reply).to.include('PEN 100.44'); });"]}}]
         }
       ]
     },

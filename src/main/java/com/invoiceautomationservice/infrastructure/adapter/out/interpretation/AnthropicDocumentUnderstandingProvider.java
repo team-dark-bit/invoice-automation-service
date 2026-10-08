@@ -34,7 +34,9 @@ public class AnthropicDocumentUnderstandingProvider implements DocumentUnderstan
       imagen y devuelve el contrato JSON solicitado. No inventes valores. Usa null y missingFields
       cuando un dato no sea legible. La confianza va de 0 a 1. No decidas impuestos, IGV,
       correlativos, aprobación ni emisión. reportedTotal es solo el total escrito en la imagen.
-      Los precios y descuentos son candidatos y serán recalculados por el dominio.
+      Extrae todos los productos visibles: crea un elemento de items por cada fila o producto y no
+      combines productos diferentes. Los precios y descuentos son candidatos y serán recalculados
+      por el dominio.
       """;
   private static final String OUTPUT_SCHEMA = """
       {
@@ -45,26 +47,29 @@ public class AnthropicDocumentUnderstandingProvider implements DocumentUnderstan
           "calculationErrors","warnings"],
         "properties":{
           "intent":{"type":"string","enum":["START_DOCUMENT","ADD_ITEM","REVIEW","UNKNOWN"]},
-          "documentType":{"type":["string","null"],"enum":["INVOICE","SALES_RECEIPT",
-            "CREDIT_NOTE","DEBIT_NOTE",null]},
-          "recipientDocumentType":{"type":["string","null"],"enum":["DNI","RUC",null]},
+          "documentType":{"anyOf":[
+            {"type":"string","enum":["INVOICE","SALES_RECEIPT","CREDIT_NOTE","DEBIT_NOTE"]},
+            {"type":"null"}]},
+          "recipientDocumentType":{"anyOf":[
+            {"type":"string","enum":["DNI","RUC"]},{"type":"null"}]},
           "recipientDocumentNumber":{"type":["string","null"]},
           "currency":{"type":["string","null"]},
           "items":{"type":"array","items":{"type":"object","additionalProperties":false,
             "required":["description","unitCode","quantity","unitPrice","discount",
               "reportedTotal","confidence","warnings"],
             "properties":{
-              "description":{"type":"string","minLength":1},
-              "unitCode":{"type":["string","null"],"enum":["NIU","ZZ","KGM","LTR",null]},
-              "quantity":{"type":["number","null"],"exclusiveMinimum":0},
-              "unitPrice":{"type":["number","null"],"minimum":0},
-              "discount":{"type":["number","null"],"minimum":0},
-              "reportedTotal":{"type":["number","null"],"minimum":0},
-              "confidence":{"type":"number","minimum":0,"maximum":1},
+              "description":{"type":"string"},
+              "unitCode":{"anyOf":[
+                {"type":"string","enum":["NIU","ZZ","KGM","LTR"]},{"type":"null"}]},
+              "quantity":{"type":["number","null"]},
+              "unitPrice":{"type":["number","null"]},
+              "discount":{"type":["number","null"]},
+              "reportedTotal":{"type":["number","null"]},
+              "confidence":{"type":"number"},
               "warnings":{"type":"array","items":{"type":"string"}}
             }}},
-          "reportedTotal":{"type":["number","null"],"minimum":0},
-          "confidence":{"type":"number","minimum":0,"maximum":1},
+          "reportedTotal":{"type":["number","null"]},
+          "confidence":{"type":"number"},
           "missingFields":{"type":"array","items":{"type":"string"}},
           "ambiguousFields":{"type":"array","items":{"type":"string"}},
           "calculationErrors":{"type":"array","items":{"type":"string"}},

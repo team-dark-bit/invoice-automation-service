@@ -145,6 +145,60 @@ class ConversationEngineServiceTest {
   }
 
   @Test
+  void acceptsSeveralProductsInOneWhatsAppStyleMessage() {
+    engine.process(conversation.id(),
+        "Quiero una boleta para DNI 12345678", "multi-1");
+
+    var result = engine.process(conversation.id(),
+        "2 cajas de gaseosa a un precio unitario de 14.80, "
+            + "2 paquetes de fideos a un precio unitario de 35.42",
+        "multi-2");
+
+    assertThat(result.context().state()).isEqualTo(ConversationFlowState.READY_TO_CREATE);
+    assertThat(result.context().itemCount()).isEqualTo(2);
+    assertThat(result.reply())
+        .contains("Detecté y confirmé 2 producto(s)")
+        .contains("2 × Cajas de gaseosa — S/ 14.80")
+        .contains("2 × Paquetes de fideos — S/ 35.42")
+        .contains("Total acumulado PEN 100.44")
+        .contains("GENERAR");
+  }
+
+  @Test
+  void guidesANewUserAndProvidesContextualHelp() {
+    var welcome = engine.process(conversation.id(), "Hola", "guide-1");
+
+    assertThat(welcome.context().state()).isEqualTo(ConversationFlowState.EMPTY);
+    assertThat(welcome.reply())
+        .contains("Te ayudaré a preparar un comprobante")
+        .contains("Quiero una boleta para DNI 12345678")
+        .contains("2 gaseosas a 3.50; 3 panes a 1 sol");
+
+    engine.process(conversation.id(), "Quiero una boleta", "guide-2");
+    var help = engine.process(conversation.id(), "AYUDA", "guide-3");
+
+    assertThat(help.reply()).contains("Indica el DNI o RUC del receptor")
+        .contains("DNI 12345678");
+  }
+
+  @Test
+  void identifiesTheIncompleteProductInAMultiProductMessage() {
+    engine.process(conversation.id(),
+        "Quiero una boleta para DNI 12345678", "missing-1");
+
+    var result = engine.process(conversation.id(), """
+        2 gaseosas a 3.50
+        3 panes
+        1 leche a 4.20
+        """, "missing-2");
+
+    assertThat(result.context().state()).isEqualTo(ConversationFlowState.COLLECTING_DATA);
+    assertThat(result.context().review().missingFields())
+        .containsExactly("items[1].unitPrice");
+    assertThat(result.reply()).contains("el precio unitario del producto 2");
+  }
+
+  @Test
   void keepsPartialHeaderAndRequestsMissingRecipient() {
     var partial = engine.process(conversation.id(), "Quiero una boleta", "p1");
     var completed = engine.process(conversation.id(), "DNI 12345678", "p2");

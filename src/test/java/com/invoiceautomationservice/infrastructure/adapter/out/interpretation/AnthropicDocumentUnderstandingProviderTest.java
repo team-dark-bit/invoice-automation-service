@@ -70,6 +70,11 @@ class AnthropicDocumentUnderstandingProviderTest {
     });
     assertThat(client.request.get("model")).isEqualTo("claude-test-model");
     assertThat(client.request).containsKeys("messages", "output_config", "system");
+    var requestJson = jsonMapper.valueToTree(client.request);
+    var schema = requestJson.path("output_config").path("format").path("schema");
+    assertThat(schema.path("properties").path("documentType").path("anyOf").isArray()).isTrue();
+    assertThat(schema.toString())
+        .doesNotContain("minLength", "minimum", "maximum", "exclusiveMinimum");
   }
 
   @Test

@@ -41,6 +41,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,12 +50,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ConversationEngineService implements ConversationEngineUseCase {
-  private static final String HELP = "Comandos: NUEVA BOLETA DNI 12345678 PEN; "
-      + "NUEVA FACTURA RUC 20123456789 PEN; AGREGAR cantidad | descripción | precio; "
-      + "RESUMEN; GENERAR para revisar; CONFIRMAR para crear el borrador; CANCELAR. "
-      + "Correcciones: CAMBIA LA CANTIDAD DE "
-      + "producto A valor; CAMBIA EL PRECIO DE producto A valor; ELIMINA producto; "
-      + "EL DNI/RUC CORRECTO ES número; ES FACTURA/BOLETA.";
+  private static final String WELCOME = "¡Hola! Te ayudaré a preparar un comprobante. "
+      + "Escribe, por ejemplo: Quiero una boleta para DNI 12345678, o "
+      + "Quiero una factura para RUC 20123456789. También puedes escribir AYUDA.";
+  private static final String PRODUCT_GUIDE = "Ahora envía uno o varios productos. "
+      + "Puedes escribirlos separados por comas, punto y coma o líneas, por ejemplo:\n"
+      + "2 gaseosas a 3.50\n3 panes a 1 sol\n1 caja de leche a 28.90\n"
+      + "También puedes enviar una fotografía.";
+  private static final String HELP = "Puedes hablar de forma natural.\n"
+      + "1. Indica el comprobante y receptor: Quiero una boleta para DNI 12345678.\n"
+      + "2. Envía uno o varios productos: 2 gaseosas a 3.50; 3 panes a 1 sol.\n"
+      + "3. Escribe GENERAR para revisar y CONFIRMAR para crear el borrador.\n"
+      + "Correcciones: Cambia la cantidad de Gaseosa a 3; "
+      + "Cambia el precio de Gaseosa a 3.80; Elimina el pan.\n"
+      + "Alternativa exacta: NUEVA BOLETA DNI 12345678 PEN y "
+      + "AGREGAR cantidad | descripción | precio.";
+  private static final Pattern ITEM_FIELD = Pattern.compile(
+      "items\\[(\\d+)]\\.(description|quantity|unitPrice)");
 
   private final ConversationRepository conversationRepository;
   private final ConversationContextRepository contextRepository;
@@ -102,7 +115,7 @@ public class ConversationEngineService implements ConversationEngineUseCase {
   private ProcessingResult execute(String companyId, ConversationContext context,
       ConversationCommandParser.Command command, Instant now) {
     if (command instanceof ConversationCommandParser.HelpCommand) {
-      return result(context, HELP, "HELP");
+      return result(context, contextualHelp(context), "HELP");
     }
     if (command instanceof ConversationCommandParser.StartCommand start) {
       if (start.documentType() == InvoiceDocumentType.INVOICE
@@ -117,8 +130,7 @@ public class ConversationEngineService implements ConversationEngineUseCase {
       }
       ConversationContext updated = context.start(start.documentType(), start.identityType(),
           start.documentNumber(), start.currency(), now);
-      return result(updated, "Datos del comprobante confirmados. Agrega productos con: "
-          + "AGREGAR cantidad | descripción | precio", "START");
+      return result(updated, "Datos del comprobante confirmados. " + PRODUCT_GUIDE, "START");
     }
     if (command instanceof ConversationCommandParser.AddItemCommand item) {
       try {
@@ -135,7 +147,7 @@ public class ConversationEngineService implements ConversationEngineUseCase {
     }
     if (command instanceof ConversationCommandParser.SummaryCommand) {
       if (context.state() == ConversationFlowState.EMPTY) {
-        return result(context, "No hay un comprobante en preparación. " + HELP,
+        return result(context, "No hay un comprobante en preparación. " + WELCOME,
             "SUMMARY_EMPTY");
       }
       BigDecimal total = calculateTotal(context);
@@ -176,7 +188,7 @@ public class ConversationEngineService implements ConversationEngineUseCase {
     if (command instanceof ConversationCommandParser.ResetCommand) {
       return result(context.reset(now), "Flujo conversacional reiniciado.", "RESET");
     }
-    return result(context, "No entendí el comando. " + HELP, "UNKNOWN");
+    return result(context, "No entendí el mensaje. " + contextualHelp(context), "UNKNOWN");
   }
 
   private ProcessingResult createConfirmedDraft(
@@ -211,8 +223,8 @@ public class ConversationEngineService implements ConversationEngineUseCase {
         new TextInterpretationInput(companyId, context.conversationId(), text,
             toInterpretationContext(context)));
     if (interpretation.intent() == InterpretationIntent.UNKNOWN) {
-      return result(context, "No entendí el mensaje. Puedes escribir naturalmente o usar: "
-          + HELP, "NATURAL_UNKNOWN");
+      return result(context, "No entendí el mensaje. " + contextualHelp(context),
+          "NATURAL_UNKNOWN");
     }
     if (interpretation.hasMissingFields()) {
       ConversationContext updated = context.stageInterpretation(
@@ -564,15 +576,11 @@ public class ConversationEngineService implements ConversationEngineUseCase {
       if (interpretation.intent() == InterpretationIntent.START_DOCUMENT) {
         ConversationContext updated = context.applyHeader(interpretation, now);
         return result(updated, "Datos del comprobante detectados y confirmados. "
-            + "Puedes describir los productos, cantidades y precios.", "NATURAL_START");
+            + PRODUCT_GUIDE, "NATURAL_START");
       }
       if (interpretation.intent() == InterpretationIntent.ADD_ITEM) {
         ConversationContext updated = context.applyItems(interpretation, now);
-        BigDecimal accumulatedTotal = calculateTotal(updated);
-        return result(updated, "Ítem detectado y confirmado. Total acumulado "
-            + updated.currency() + " "
-            + accumulatedTotal.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
-            + ". " + readyInstruction(updated), "NATURAL_ADD_ITEM");
+        return result(updated, detectedItemsReply(interpretation, updated), "NATURAL_ADD_ITEM");
       }
       return result(context, "La interpretación no puede aplicarse automáticamente.",
           "NATURAL_UNSUPPORTED");
@@ -598,16 +606,75 @@ public class ConversationEngineService implements ConversationEngineUseCase {
   }
 
   private String describeFields(List<String> fields) {
-    return fields.stream().map(field -> switch (field) {
+    return fields.stream().map(this::describeField)
+        .distinct().collect(java.util.stream.Collectors.joining(", "));
+  }
+
+  private String describeField(String field) {
+    String common = switch (field) {
       case "documentType" -> "si es boleta o factura";
       case "recipientDocumentType" -> "si el receptor usa DNI o RUC";
       case "recipientDocumentNumber" -> "el número de DNI o RUC";
       case "recipientDocument" -> "el tipo y número de documento del receptor";
-      case "items[0].description" -> "la descripción";
-      case "items[0].quantity" -> "la cantidad";
-      case "items[0].unitPrice" -> "el precio unitario";
+      default -> null;
+    };
+    if (common != null) return common;
+    Matcher matcher = ITEM_FIELD.matcher(field);
+    if (!matcher.matches()) return field;
+    int productNumber = Integer.parseInt(matcher.group(1)) + 1;
+    return switch (matcher.group(2)) {
+      case "description" -> "la descripción del producto " + productNumber;
+      case "quantity" -> "la cantidad del producto " + productNumber;
+      case "unitPrice" -> "el precio unitario del producto " + productNumber;
       default -> field;
-    }).distinct().collect(java.util.stream.Collectors.joining(", "));
+    };
+  }
+
+  private String detectedItemsReply(
+      DocumentInterpretation interpretation, ConversationContext context) {
+    StringBuilder reply = new StringBuilder("Detecté y confirmé ")
+        .append(interpretation.items().size()).append(" producto(s):");
+    for (int index = 0; index < interpretation.items().size(); index++) {
+      InterpretedInvoiceItem item = interpretation.items().get(index);
+      reply.append("\n").append(index + 1).append(". ")
+          .append(item.quantity().stripTrailingZeros().toPlainString()).append(" × ")
+          .append(item.description()).append(" — ")
+          .append(currencySymbol(context.currency())).append(" ")
+          .append(item.unitPrice().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
+    }
+    return reply.append("\nTotal acumulado ").append(context.currency()).append(" ")
+        .append(calculateTotal(context).setScale(2, java.math.RoundingMode.HALF_UP)
+            .toPlainString())
+        .append(". ").append(readyInstruction(context)).toString();
+  }
+
+  private String contextualHelp(ConversationContext context) {
+    if (context.state() == ConversationFlowState.EMPTY) return WELCOME + "\n\n" + HELP;
+    DocumentInterpretation pending = context.lastInterpretation();
+    InvoiceDocumentType documentType = context.documentType() != null
+        ? context.documentType() : pending == null ? null : pending.documentType();
+    IdentityDocumentType identityType = context.recipientDocumentType() != null
+        ? context.recipientDocumentType()
+        : pending == null ? null : pending.recipientDocumentType();
+    String documentNumber = context.recipientDocumentNumber() != null
+        ? context.recipientDocumentNumber()
+        : pending == null ? null : pending.recipientDocumentNumber();
+    if (documentType == null) {
+      return "Indica si deseas una boleta o una factura. Ejemplo: Quiero una boleta.";
+    }
+    if (identityType == null || documentNumber == null) {
+      return documentType == InvoiceDocumentType.INVOICE
+          ? "Indica el RUC del receptor. Ejemplo: RUC 20123456789."
+          : "Indica el DNI o RUC del receptor. Ejemplo: DNI 12345678.";
+    }
+    if (context.items().isEmpty()) return PRODUCT_GUIDE;
+    if (context.state() == ConversationFlowState.NEEDS_REVIEW) {
+      return "Revisa los valores detectados. Puedes responder CONFIRMAR o indicar una corrección.";
+    }
+    if (context.state() == ConversationFlowState.READY_TO_CREATE) {
+      return "Puedes enviar más productos o escribir GENERAR para revisar el resumen.";
+    }
+    return HELP;
   }
 
   private BigDecimal calculateTotal(ConversationContext context) {

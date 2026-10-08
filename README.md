@@ -323,10 +323,13 @@ El mismo endpoint también admite texto natural mediante reglas locales, sin con
 - `Quiero una boleta para DNI 12345678`
 - `Leche Gloria, dos unidades a 3.50`
 - `Agrega tres panes a un sol`
+- `2 cajas de gaseosa a 14.80, 2 paquetes de fideos a 35.42`
+
+Un mensaje puede contener varios productos separados por comas, punto y coma o saltos de línea. Cada producto se convierte en un ítem independiente, y la respuesta enumera lo detectado y muestra el total acumulado calculado por el backend. Si un producto está incompleto, el motor identifica su posición; por ejemplo, solicita `el precio unitario del producto 2` en lugar de exponer nombres técnicos del contrato.
 
 El intérprete reconoce boleta o factura, DNI/RUC, moneda, descripción, cantidad y precio unitario. Acepta números en cifras o palabras en español, incluyendo formas como `treinta y dos` y precios como `tres con cincuenta soles`. Los productos confirmados de mensajes sucesivos se acumulan y cada respuesta informa el total recalculado por el backend. Si faltan tipo de comprobante, receptor, cantidad o precio, el estado permanece en `COLLECTING_DATA` y solicita esos datos sin inventarlos. Si el total informado no coincide con cantidad por precio, no incorpora todavía el ítem: pasa a `NEEDS_REVIEW` y exige `CONFIRMAR` o una corrección.
 
-Estas reglas cubren formatos controlados; no pretenden comprender cualquier redacción. Ante un mensaje no reconocido, la respuesta incluye los comandos exactos disponibles, que siguen teniendo prioridad sobre la interpretación natural.
+El onboarding también pertenece al motor y no a la interfaz web. Un primer mensaje como `Hola` explica cómo indicar comprobante, receptor y productos; `AYUDA` adapta la respuesta al dato que falta en ese momento. Esto permite reutilizar exactamente el mismo recorrido cuando el canal sea WhatsApp. Las reglas cubren formatos controlados y los comandos exactos continúan disponibles como alternativa determinista.
 
 ### Correcciones conversacionales
 
@@ -358,7 +361,7 @@ La interpretación de IA es únicamente una fuente de datos candidatos. Su afect
 
 Spring Boot sirve una interfaz responsive desde `src/main/resources/static` en `http://localhost:8080/`. No requiere Node, npm ni un servidor adicional: `index.html`, `app.js` y `styles.css` se empaquetan dentro del mismo artefacto ejecutable. La portada y sus assets son públicos para permitir el login; todas las operaciones y datos continúan protegidos por JWT.
 
-La web permite iniciar sesión, seleccionar una empresa asociada al usuario y crear una conversación REST. El chat utiliza el mismo `ConversationEngineUseCase` que utilizará WhatsApp, por lo que admite texto natural, comandos deterministas, correcciones, `GENERAR` y `CONFIRMAR`. El panel lateral representa por separado valores detectados y confirmados, confianza, campos faltantes, ambigüedades, errores de cálculo y el estado `AWAITING_DRAFT_CONFIRMATION`.
+La web permite iniciar sesión, seleccionar una empresa asociada al usuario y crear una conversación REST. Es un banco de pruebas temporal, no el canal final. El chat utiliza el mismo `ConversationEngineUseCase` que utilizará WhatsApp, por lo que admite onboarding contextual, varios productos por mensaje, texto natural, comandos deterministas, correcciones, `GENERAR` y `CONFIRMAR`. El panel lateral representa por separado valores detectados y confirmados, confianza, campos faltantes, ambigüedades, errores de cálculo y el estado `AWAITING_DRAFT_CONFIRMATION`.
 
 Las imágenes JPEG, PNG y WebP se previsualizan localmente antes de enviarse. Tras la carga, la interfaz consulta su estado hasta alcanzar `EXTRACTED` o `FAILED` y muestra un indicador durante `RECEIVED` y `PROCESSING`; las validaciones reales de firma, tamaño, dimensiones y duplicados siguen ejecutándose exclusivamente en el backend.
 

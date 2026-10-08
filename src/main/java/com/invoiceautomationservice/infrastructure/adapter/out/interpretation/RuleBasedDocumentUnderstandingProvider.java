@@ -31,10 +31,17 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
   private static final Pattern TOTAL = Pattern.compile(
       "(?:[,;]\\s*|\\s+)total\\s*(?:=|:|es)?\\s*(.+)$");
   private static final Pattern PRICE_MARKER = Pattern.compile(
-      "\\s+(?:a|por|precio(?:\\s+unitario)?(?:\\s*(?:de|es|=|:))?)\\s+",
+      "\\s+(?:(?:a|por)\\s+(?:un\\s+)?precio(?:\\s+unitario)?(?:\\s+de)?|"
+          + "precio(?:\\s+unitario)?(?:\\s*(?:de|es|=|:))?|a|por)\\s+",
       Pattern.CASE_INSENSITIVE);
   private static final Pattern UNIT_SUFFIX = Pattern.compile(
       "\\s*(?:unidades?|unds?\\.?|u\\.)\\s*$", Pattern.CASE_INSENSITIVE);
+  private static final String QUANTITY_START =
+      "(?:\\d+(?:[.,]\\d+)?|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|"
+          + "diez|once|doce|trece|catorce|quince|dieci\\w+|veinti\\w+|treinta|cuarenta|"
+          + "cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|\\w+cientos)";
+  private static final Pattern ITEM_COMMA_SEPARATOR = Pattern.compile(
+      ",\\s*(?=" + QUANTITY_START + "\\b)", Pattern.CASE_INSENSITIVE);
 
   @Override
   public DocumentInterpretation interpretText(TextInterpretationInput input) {
@@ -111,15 +118,53 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
       working = working.substring(0, totalMatcher.start()).strip();
     }
 
-    Matcher marker = PRICE_MARKER.matcher(working);
-    String beforePrice = working;
-    BigDecimal unitPrice = null;
-    if (marker.find()) {
-      beforePrice = working.substring(0, marker.start()).strip();
-      unitPrice = SpanishNumberParser.parse(working.substring(marker.end())).orElse(null);
+    List<String> segments = splitItemSegments(working);
+    List<String> missing = new ArrayList<>();
+    List<String> warnings = new ArrayList<>();
+    List<InterpretedInvoiceItem> items = new ArrayList<>();
+    BigDecimal calculated = BigDecimal.ZERO;
+    boolean calculationComplete = true;
+    for (int index = 0; index < segments.size(); index++) {
+      ParsedItem parsed = parseItemSegment(segments.get(index), index);
+      missing.addAll(parsed.missingFields());
+      warnings.addAll(parsed.warnings());
+      BigDecimal itemReportedTotal = segments.size() == 1 ? reportedTotal : null;
+      items.add(new InterpretedInvoiceItem(parsed.description(), UnitCode.NIU,
+          parsed.quantity(), parsed.unitPrice(), BigDecimal.ZERO, TaxAffectation.TAXED,
+          itemReportedTotal, confidence(parsed.missingFields(), List.of()), parsed.warnings()));
+      if (parsed.quantity() == null || parsed.unitPrice() == null) {
+        calculationComplete = false;
+      } else {
+        calculated = calculated.add(parsed.quantity().multiply(parsed.unitPrice()));
+      }
     }
 
-    String description = null;
+    List<String> calculationErrors = new ArrayList<>();
+    if (reportedTotal != null && calculationComplete) {
+      BigDecimal rounded = calculated.setScale(2, RoundingMode.HALF_UP);
+      if (rounded.compareTo(reportedTotal.setScale(2, RoundingMode.HALF_UP)) != 0) {
+        calculationErrors.add("El total indicado " + reportedTotal.toPlainString()
+            + " no coincide con el total calculado " + rounded.toPlainString());
+      }
+    }
+    return new DocumentInterpretation(InterpretationSource.TEXT, InterpretationIntent.ADD_ITEM,
+        input.context().documentType(), input.context().recipientDocumentType(),
+        input.context().recipientDocumentNumber(), input.context().currency(), items,
+        reportedTotal, confidence(missing, List.of()), missing, List.of(), calculationErrors,
+        warnings);
+  }
+
+  private ParsedItem parseItemSegment(String segment, int index) {
+    segment = segment.replaceFirst("^(?:agrega|agregar|anade|anadir)\\s+", "");
+    Matcher marker = PRICE_MARKER.matcher(segment);
+    String beforePrice = segment;
+    BigDecimal unitPrice = null;
+    if (marker.find()) {
+      beforePrice = segment.substring(0, marker.start()).strip();
+      unitPrice = SpanishNumberParser.parse(segment.substring(marker.end())).orElse(null);
+    }
+
+    String description;
     BigDecimal quantity = null;
     int comma = beforePrice.indexOf(',');
     if (comma >= 0) {
@@ -141,32 +186,33 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
 
     List<String> missing = new ArrayList<>();
     if (description == null || description.isBlank()) {
-      missing.add("items[0].description");
+      missing.add("items[" + index + "].description");
       description = "Producto por confirmar";
     }
-    if (quantity == null) {
-      missing.add("items[0].quantity");
-    }
-    if (unitPrice == null) {
-      missing.add("items[0].unitPrice");
-    }
-    List<String> warnings = new ArrayList<>();
-    List<String> calculationErrors = new ArrayList<>();
-    if (reportedTotal != null && quantity != null && unitPrice != null) {
-      BigDecimal calculated = quantity.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP);
-      if (calculated.compareTo(reportedTotal.setScale(2, RoundingMode.HALF_UP)) != 0) {
-        calculationErrors.add("El total indicado " + reportedTotal.toPlainString()
-            + " no coincide con el total calculado " + calculated.toPlainString());
+    if (quantity == null) missing.add("items[" + index + "].quantity");
+    if (unitPrice == null) missing.add("items[" + index + "].unitPrice");
+    return new ParsedItem(description, quantity, unitPrice, missing, List.of());
+  }
+
+  private List<String> splitItemSegments(String text) {
+    List<String> result = new ArrayList<>();
+    for (String block : text.split("\\s*(?:;|\\n+)\\s*")) {
+      if (block.isBlank()) continue;
+      String[] commaCandidates = ITEM_COMMA_SEPARATOR.split(block);
+      if (commaCandidates.length > 1
+          && java.util.Arrays.stream(commaCandidates).allMatch(this::hasItemShape)) {
+        java.util.Arrays.stream(commaCandidates).map(String::strip)
+            .filter(value -> !value.isBlank()).forEach(result::add);
+      } else {
+        result.add(block.strip());
       }
     }
-    var item = new InterpretedInvoiceItem(description, UnitCode.NIU, quantity, unitPrice,
-        BigDecimal.ZERO, TaxAffectation.TAXED, reportedTotal,
-        confidence(missing, List.of()), warnings);
-    return new DocumentInterpretation(InterpretationSource.TEXT, InterpretationIntent.ADD_ITEM,
-        input.context().documentType(), input.context().recipientDocumentType(),
-        input.context().recipientDocumentNumber(), input.context().currency(), List.of(item),
-        reportedTotal, confidence(missing, List.of()), missing, List.of(), calculationErrors,
-        warnings);
+    return result.isEmpty() ? List.of(text.strip()) : result;
+  }
+
+  private boolean hasItemShape(String value) {
+    ParsedItem parsed = parseItemSegment(value, 0);
+    return parsed.quantity() != null && !"Producto por confirmar".equals(parsed.description());
   }
 
   private boolean looksLikeHeader(String text) {
@@ -176,7 +222,8 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
 
   private boolean looksLikeItem(String text) {
     return text.matches("^(?:agrega|agregar|anade|anadir)\\b.*")
-        || PRICE_MARKER.matcher(text).find() || text.contains("precio unitario");
+        || PRICE_MARKER.matcher(text).find() || text.contains("precio unitario")
+        || splitItemSegments(text).size() > 1;
   }
 
   private String detectCurrency(String text, String current) {
@@ -205,6 +252,12 @@ public class RuleBasedDocumentUnderstandingProvider implements DocumentUnderstan
 
   private String normalize(String value) {
     return Normalizer.normalize(value.strip().toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
-        .replaceAll("\\p{M}", "").replaceAll("\\s+", " ");
+        .replaceAll("\\p{M}", "")
+        .replaceAll("[\\t\\x0B\\f\\r ]+", " ")
+        .replaceAll(" *\\n+ *", "\n");
   }
+
+  private record ParsedItem(
+      String description, BigDecimal quantity, BigDecimal unitPrice,
+      List<String> missingFields, List<String> warnings) {}
 }

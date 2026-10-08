@@ -17,7 +17,7 @@ class HttpAnthropicMessagesClient implements AnthropicMessagesClient {
   private static final String API_VERSION = "2023-06-01";
   private final RestClient restClient;
 
-  HttpAnthropicMessagesClient(RestClient.Builder builder, AiProperties properties) {
+  HttpAnthropicMessagesClient(AiProperties properties) {
     if (properties.getApiKey() == null) {
       throw new IllegalStateException(
           "ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic");
@@ -27,7 +27,7 @@ class HttpAnthropicMessagesClient implements AnthropicMessagesClient {
         .build();
     var requestFactory = new JdkClientHttpRequestFactory(httpClient);
     requestFactory.setReadTimeout(properties.getReadTimeout());
-    this.restClient = builder.baseUrl(properties.getBaseUrl())
+    this.restClient = RestClient.builder().baseUrl(properties.getBaseUrl())
         .requestFactory(requestFactory)
         .defaultHeader("x-api-key", properties.getApiKey())
         .defaultHeader("anthropic-version", API_VERSION)

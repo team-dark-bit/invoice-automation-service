@@ -56,6 +56,51 @@ class RuleBasedDocumentUnderstandingProviderTest {
   }
 
   @Test
+  void interpretsSeveralCommaSeparatedProductsInOneMessage() {
+    var result = provider.interpretText(input(
+        "2 cajas de gaseosa a un precio unitario de 14.80, "
+            + "2 paquetes de fideos a un precio unitario de 35.42",
+        receiptContext()));
+
+    assertThat(result.intent()).isEqualTo(InterpretationIntent.ADD_ITEM);
+    assertThat(result.missingFields()).isEmpty();
+    assertThat(result.items()).hasSize(2);
+    assertThat(result.items().get(0)).satisfies(item -> {
+      assertThat(item.description()).isEqualTo("Cajas de gaseosa");
+      assertThat(item.quantity()).isEqualByComparingTo("2");
+      assertThat(item.unitPrice()).isEqualByComparingTo("14.80");
+    });
+    assertThat(result.items().get(1)).satisfies(item -> {
+      assertThat(item.description()).isEqualTo("Paquetes de fideos");
+      assertThat(item.quantity()).isEqualByComparingTo("2");
+      assertThat(item.unitPrice()).isEqualByComparingTo("35.42");
+    });
+  }
+
+  @Test
+  void interpretsProductsSeparatedByLinesAndReportsTheSpecificMissingField() {
+    var result = provider.interpretText(input("""
+        2 gaseosas a 3.50
+        3 panes
+        1 leche a 4.20
+        """, receiptContext()));
+
+    assertThat(result.items()).hasSize(3);
+    assertThat(result.missingFields()).containsExactly("items[1].unitPrice");
+    assertThat(result.items().get(1).description()).isEqualTo("Panes");
+  }
+
+  @Test
+  void validatesTheReportedTotalAgainstAllProducts() {
+    var result = provider.interpretText(input(
+        "2 gaseosas a 3.50; 3 panes a 1.00 total = 10.00", receiptContext()));
+
+    assertThat(result.items()).hasSize(2);
+    assertThat(result.reportedTotal()).isEqualByComparingTo("10.00");
+    assertThat(result.calculationErrors()).isEmpty();
+  }
+
+  @Test
   void reportsMissingItemDataInsteadOfInventingIt() {
     var result = provider.interpretText(input("Agrega Leche Gloria", receiptContext()));
 
